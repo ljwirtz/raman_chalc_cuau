@@ -1,0 +1,1539 @@
+<meta charset="utf-8">
+<title>Zone-Folding Raman Explorer</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one column, controls above a single spectrum panel, stats and a mode table beneath. Instrument-panel feel: slate neutrals, blue = current, orange = endpoint. */
+:root{
+  --bg:#f3f5f7; --surface:#ffffff; --ink:#12181d; --ink-2:#465360; --muted:#6f7c88; --line:#dde3e8; --line-soft:#eaeef1;
+  --series-1:#2a78d6; --series-2:#eb6834; --series-3:#1baf7a; --ref:#465360; --focus:#2a78d6; --sp-in:#8e6bd0; --sp-cu:#e0a12b; --sp-se:#1baf7a;
+  --font-ui:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-num:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1418; --surface:#171d22; --ink:#eef2f5; --ink-2:#b3bec8; --muted:#8894a0; --line:#2a333b; --line-soft:#212a31;
+    --series-1:#3987e5; --series-2:#d95926; --series-3:#199e70; --ref:#b3bec8; --focus:#6aa6ee; --sp-in:#9a80da; --sp-cu:#d49a30; --sp-se:#1fa878; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f1418; --surface:#171d22; --ink:#eef2f5; --ink-2:#b3bec8; --muted:#8894a0; --line:#2a333b; --line-soft:#212a31;
+  --series-1:#3987e5; --series-2:#d95926; --series-3:#199e70; --ref:#b3bec8; --focus:#6aa6ee; --sp-in:#9a80da; --sp-cu:#d49a30; --sp-se:#1fa878; color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+#ca-note{font-size:.78rem;color:var(--muted);margin:6px 0 0}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-ui);font-size:15px;line-height:1.5;padding-inline:16px;padding-block:20px 40px}
+.wrap{max-width:1000px;margin-inline:auto;display:flex;flex-direction:column;gap:16px}
+h1{font-size:1.5rem;line-height:1.2;font-weight:600;margin:0;text-wrap:balance}
+.lede{margin:6px 0 0;color:var(--ink-2);max-width:68ch}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px}
+.grid{display:grid;grid-template-columns:minmax(0,320px) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:820px){.grid{grid-template-columns:minmax(0,1fr)}}
+.controls{display:flex;flex-direction:column;gap:16px}
+.seg{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{font:inherit;font-weight:500;padding:9px 8px;border:0;background:transparent;color:var(--ink-2);cursor:pointer;min-width:0}
+.seg button+button{border-left:1px solid var(--line)}
+#src button:nth-child(3){border-left:0}
+#src button:nth-child(n+3){border-top:1px solid var(--line)}
+.seg button[aria-checked="true"]{background:var(--series-1);color:#fff}
+.seg small{display:block;font-weight:400;font-size:.75rem;opacity:.85}
+button:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.sl{display:flex;flex-direction:column;gap:4px}
+.sl .row{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.sl label{font-weight:500}
+.sl output{font-family:var(--font-num);font-size:.85rem;color:var(--ink-2);white-space:nowrap}
+.sl .ends{display:flex;justify-content:space-between;font-size:.75rem;color:var(--muted)}
+.sl .hint{font-size:.78rem;color:var(--muted);margin:0}
+input[type=range]{width:100%;accent-color:var(--series-1);margin:4px 0}
+input[type=range]:disabled{opacity:.45}
+.chk{display:flex;gap:8px;align-items:flex-start;font-size:.85rem;color:var(--ink-2)}
+.chk input{margin-top:3px}
+.inl{display:flex;gap:8px;align-items:center;font-size:.85rem;color:var(--ink-2);flex-wrap:wrap}
+.inl input[type=number]{width:5.2rem;font:inherit;font-family:var(--font-num);padding:4px 6px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
+.inl select{font:inherit;padding:4px 6px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
+.presets{display:flex;flex-wrap:wrap;gap:6px}
+.presets button{font:inherit;font-size:.82rem;padding:5px 10px;border:1px solid var(--line);border-radius:999px;background:transparent;color:var(--ink);cursor:pointer}
+.presets button:hover{border-color:var(--series-1)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:.85rem;color:var(--ink-2);margin-bottom:8px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend svg{flex:none}
+#chart{position:relative}
+#chart svg{display:block;width:100%;height:auto;touch-action:pan-y}
+#tip{position:absolute;pointer-events:none;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:.8rem;line-height:1.45;box-shadow:0 4px 14px rgba(0,0,0,.14);min-width:180px;z-index:2}
+#tip .f{font-family:var(--font-num);font-weight:500}
+#tip i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:12px}
+@media (max-width:560px){.stats{grid-template-columns:minmax(0,1fr)}}
+.stat{border-top:2px solid var(--line);padding-top:6px}
+.stat .v{font-family:var(--font-num);font-size:1.25rem;font-weight:500}
+.stat .k{font-size:.78rem;color:var(--muted)}
+.bar{height:8px;border-radius:4px;background:var(--line-soft);overflow:hidden;display:flex;margin-top:6px}
+.bar i{display:block;height:100%}
+details{font-size:.88rem}
+summary{cursor:pointer;font-weight:500}
+.tblwrap{overflow-x:auto;margin-top:8px}
+table{border-collapse:collapse;width:100%;font-family:var(--font-num);font-size:.8rem;font-variant-numeric:tabular-nums}
+th,td{text-align:right;padding:4px 10px;border-bottom:1px solid var(--line-soft);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--muted);font-weight:500}
+.note{color:var(--ink-2);font-size:.85rem;max-width:80ch}
+.note p{margin:6px 0}
+.axis text{fill:var(--muted);font-family:var(--font-num);font-size:11px}
+.axis-title{fill:var(--ink-2);font-size:12px;font-family:var(--font-ui)}
+@media (prefers-reduced-motion:no-preference){.bar i{transition:width .12s linear}}
+.chip{display:inline-flex;align-items:center;gap:5px;font-family:var(--font-num);font-size:.78rem;padding:2px 8px;border-radius:10px;border:1px solid var(--line)}
+.chip::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--c)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px}
+.k{font-size:.78rem;color:var(--muted)}
+.vh{display:flex;flex-direction:column;gap:2px}
+.vib{display:flex;flex-wrap:wrap;gap:24px 40px;margin-top:10px}
+.vcol{min-width:0;flex:1 1 300px}
+.vsvg{margin-top:8px;overflow-x:auto}
+.vcv{display:block;width:100%;max-width:420px;margin-top:8px;touch-action:none;border:1px solid var(--line-soft);border-radius:10px;background:var(--surface)}
+tr.sel td{background:var(--line-soft)}
+tbody tr[data-f]{cursor:pointer}
+caption{text-align:left;font-weight:600;padding:6px 0;color:var(--ink-2)}
+.spb{margin-top:10px}
+.tools{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center}
+.btn{font:inherit;font-size:.85rem;padding:5px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);cursor:pointer}
+.btn:hover{border-color:var(--muted)}
+.dgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:8px}
+@media (max-width:820px){.dgrid{grid-template-columns:minmax(0,1fr)}}
+.dcell svg{display:block;width:100%;height:auto}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Zone-Folding Raman Explorer</h1>
+    <p class="lede nol10n">ZnSe and ZnS turned into CuInSe₂ and CuInS₂ in the chalcopyrite (CH) or CuAu (CA) cell. Each slider moves one ingredient (Raman tensors, masses, force constants) from the parent value (0) to the value of the ternary compound (1), so you can follow how the Raman spectrum of the parent turns into that of the ternary compound and which ingredient lights up the zone-folded lines. Data: HSE06 phonons and Raman tensors (FHI-aims + phonopy), with the parent computed in the same CA (4-atom) and CH (8-atom) cells; Supplemental Material to “Zone-folding origin of the CuAu/chalcopyrite Raman splitting in zinc-blende- and wurtzite-derived ternary semiconductors”.</p>
+  </header>
+
+  <div class="grid">
+    <section class="panel controls" aria-label="Controls">
+      <div class="sl" hidden>
+        <div class="row"><label id="l-src">Engine</label></div>
+        <div class="seg" role="radiogroup" aria-labelledby="l-src" id="src">
+          <button type="button" role="radio" aria-checked="true" data-src="HS">Ab initio<small>HSE06 (FHI-aims)</small></button>
+        </div>
+      </div>
+      <div class="sl nol10n" id="mat-row">
+        <div class="row"><label id="l-mat">Material</label></div>
+        <div class="seg" role="radiogroup" aria-labelledby="l-mat" id="mat">
+          <button type="button" role="radio" aria-checked="true" data-mat="Se">Selenides<small>ZnSe → CuInSe₂</small></button>
+          <button type="button" role="radio" aria-checked="false" data-mat="S">Sulfides<small>ZnS → CuInS₂</small></button>
+        </div>
+        <p class="hint" id="mat-hint" hidden>The phonon-dispersion section below is a Keating model of ZnSe, so it is hidden for the sulfides.</p>
+      </div>
+      <div>
+        <div class="seg" role="radiogroup" aria-label="Target structure: CH, CA or both in the same plot" id="kind">
+          <button type="button" role="radio" aria-checked="true" data-kind="CH">CH<small>chalcopyrite, 8 atoms</small></button>
+          <button type="button" role="radio" aria-checked="false" data-kind="CA" id="btn-ca">CA<small>CuAu, 4 atoms</small></button>
+          <button type="button" role="radio" aria-checked="false" data-kind="BOTH" id="btn-both">CH + CA<small>same plot</small></button>
+        </div>
+        <p class="hint" id="ca-note" hidden>No Quantum ESPRESSO data for the CA cell were supplied. Use the CRYSTAL or the semiempirical engine for CA or for both structures.</p>
+      </div>
+
+      <div class="sl">
+        <div class="row"><label for="s-tens" id="l-tens">Tensor contrast</label><output id="o-tens" for="s-tens"></output></div>
+        <input type="range" id="s-tens" min="0" max="1" step="0.01" value="0">
+        <div class="ends"><span id="tens-lo">Cu-Se = In-Se</span><span id="tens-hi">δ = <span id="dEndLbl">0.30</span></span></div>
+        <p class="hint" id="tens-hint">Cu-Se and In-Se bonds get polarizability derivatives scaled by 1+δ and 1−δ.</p>
+      </div>
+
+      <div class="sl">
+        <div class="row"><label for="s-mass">Masses</label><output id="o-mass" for="s-mass"></output></div>
+        <input type="range" id="s-mass" min="0" max="1" step="0.01" value="0">
+        <div class="ends"><span>Zn, Zn</span><span>Cu, In</span></div>
+      </div>
+
+      <div class="sl">
+        <div class="row"><label for="s-dmat">Dynamical matrix</label><output id="o-dmat" for="s-dmat"></output></div>
+        <input type="range" id="s-dmat" min="0" max="1" step="0.01" value="0">
+        <div class="ends"><span>ZnSe forces</span><span id="dm-hi">CuInSe₂ fit</span></div>
+        <label class="chk" for="c-link" id="lk-box"><input type="checkbox" id="c-link" checked> Move the structure (u, c/a, bond lengths) together with the dynamical matrix</label>
+      </div>
+
+      <div class="sl" id="geomBox" hidden>
+        <div class="row"><label for="s-geom">Structure</label><output id="o-geom" for="s-geom"></output></div>
+        <input type="range" id="s-geom" min="0" max="1" step="0.01" value="0">
+        <div class="ends"><span>ideal ZB cell</span><span>relaxed CuInSe₂</span></div>
+      </div>
+
+      <div>
+        <div class="presets" role="group" aria-label="Presets">
+          <button type="button" data-p="zn">ZnSe</button>
+          <button type="button" data-p="tens">Tensor only</button>
+          <button type="button" data-p="mass">Masses only</button>
+          <button type="button" data-p="dmat">Dynamical matrix only</button>
+          <button type="button" data-p="all">All at 1</button>
+        </div>
+      </div>
+
+      <div class="inl" id="dend-row">
+        <label for="n-dend">δ at slider 1</label><input type="number" id="n-dend" min="0" max="0.6" step="0.05" value="0.30">
+        </div>
+      <div class="inl"><label for="n-gam">Line width</label><input type="number" id="n-gam" min="1" max="12" step="0.5" value="4"><span>cm⁻¹ (FWHM)</span></div>
+      <div class="inl"><label for="sel-shade">Shade the spectrum by</label>
+        <select id="sel-shade"><option value="fold">zone folding (folded part)</option><option value="species">atoms that move (Cu, In, Se)</option><option value="tensor">atoms whose dχ/du makes the line</option></select></div>
+      <div class="inl" id="shk-row"><label for="sel-shk">Shaded structure</label><select id="sel-shk"><option value="CH">CH</option><option value="CA">CA</option></select></div>
+      <div class="inl"><label class="chk" for="c-end" style="align-items:center"><input type="checkbox" id="c-end" checked style="margin:0"> show the all-sliders-at-1 curves</label></div>
+      <div class="tools"><button type="button" class="btn" id="btn-agr" hidden>Export this plot (xmgrace)</button><span class="k" id="agr-status" role="status"></span></div>
+      <div class="inl" id="scl-row"><label for="sel-scl">Scale a curve</label><select id="sel-scl"></select><span class="k">×</span><input type="number" id="n-scl" min="0" step="any" value="1" style="width:6.5em"><button type="button" class="btn" id="btn-scl">Reset</button></div>
+      <p class="hint" style="margin:-4px 0 0">Multiplies the drawn curve (and its shading) only, for display. Tables, bars and numbers are not rescaled.</p>
+      <div class="inl" id="asr-row"><label class="chk" for="c-asr" style="align-items:center"><input type="checkbox" id="c-asr" style="margin:0"> impose the acoustic sum rule on the Raman tensor</label></div>
+      <div class="inl">
+        <label for="sel-y">Intensity axis</label>
+        <select id="sel-y"><option value="lin">linear</option><option value="sqrt">square root</option><option value="log">logarithmic</option></select>
+        <label class="chk" for="c-auto" style="align-items:center"><input type="checkbox" id="c-auto" style="margin:0"> auto range</label>
+      </div>
+    </section>
+
+    <section class="panel" aria-label="Raman spectrum">
+      <div class="legend" id="legend"></div>
+      <div id="chart"></div>
+      <div class="stats">
+        <div class="stat"><div class="v" id="st-fold">–</div><div class="k">folded-mode weight, in units of the ZnSe total</div></div>
+        <div class="stat"><div class="v" id="st-share">–</div><div class="k">of the Raman weight sits in folded modes</div><div class="bar" id="bar"></div></div>
+        <div class="stat"><div class="v" id="st-top">–</div><div class="k">strongest line <span id="st-lab"></span></div></div>
+      </div>
+      <div id="spbars"></div>
+    </section>
+  </div>
+
+  <section class="panel" id="disp-panel" aria-label="Phonon dispersion" hidden>
+    <div class="tools" style="justify-content:space-between">
+      <h2 style="margin:0;font-size:1rem">Phonon dispersion: ZnSe (ZB) folded into CH and CA</h2>
+      <div class="tools"><label for="sel-path" class="k">Path in the ZB zone</label>
+        <select id="sel-path"><option value="full">Γ – X(z) – W – K – Γ – L</option><option value="xz">Γ – X along z (the c axis)</option><option value="xx">Γ – X along x (an a axis)</option><option value="w">Γ – W(1,0,½)</option><option value="l">Γ – L</option></select>
+        <label class="chk k" for="c-dfold" style="align-items:center"><input type="checkbox" id="c-dfold" checked style="margin:0"> show the folded bands (no ZB character)</label>
+        <label class="chk k" for="c-dgam" style="align-items:center"><input type="checkbox" id="c-dgam" checked style="margin:0"> ab initio levels at Γ</label></div>
+    </div>
+    <p class="k" style="margin:4px 0 0">The Mass and Dynamical matrix sliders above move the CH and CA panels away from ZnSe; the ZB panel stays fixed. All three are plotted along the same path of the ZB zone. A dot is one band of the CH or CA cell at that ZB wavevector; its size and opacity are its ZB character, the weight on the six ZB plane waves (cation and anion, x y z). Grey lines are the ZnSe bands. At 0 the ZB-like bands sit on the grey lines and the rest are folded copies; as the sliders move, weight leaks from the ZB bands into the folded ones, and bands that were degenerate split.</p>
+    <div class="dgrid" id="dgrid"></div>
+    <div class="stats" style="margin-top:10px">
+      <div class="stat"><div class="v" id="d-chw">–</div><div class="k">CH: how ZB-like the bands stay along the path (weight-averaged ZB character; 100 % = pure ZnSe bands, lower = ZB bands split among folded bands)</div></div>
+      <div class="stat"><div class="v" id="d-caw">–</div><div class="k">CA: the same measure for the CA cell</div></div>
+      <div class="stat"><div class="v" id="d-g">–</div><div class="k" id="d-gk">ZB points that fold onto Γ</div></div>
+    </div>
+    <p class="note" style="margin:8px 0 0" id="d-note">Model: nearest-neighbor Keating force field with Bloch phases (the same force constants as the semiempirical engine), so the dispersion is always the semiempirical one whichever engine is selected above; the ab initio data (HSE06, CRYSTAL, Quantum ESPRESSO) are Γ-only, and are drawn as hollow circles at Γ for comparison. No LO–TO splitting, so the ZB optical branch is flat at Γ. Folded points: CA Γ ← Γ, X(z); CH Γ ← Γ, X(z), W(1,0,±½), W(0,1,±½).</p>
+  </section>
+
+  <section class="panel" id="vib-panel">
+    <div class="tools" style="justify-content:space-between">
+      <h2 style="margin:0;font-size:1rem">Where the picked line comes from</h2>
+      <div class="tools"><label for="sel-view" class="k">View</label><select id="sel-view"><option value="obl">oblique</option><option value="y">side, x–z plane</option><option value="x">side, y–z plane</option><option value="z">top, x–y plane</option></select>
+      <button type="button" class="btn" id="btn-play" aria-pressed="true">❚❚ Pause</button>
+      <label for="sel-speed" class="k">Speed</label><select id="sel-speed"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option></select>
+      <label class="chk k" for="c-fscale" style="align-items:center"><input type="checkbox" id="c-fscale" checked style="margin:0"> rate ∝ line frequency</label>
+      <label class="chk k" for="c-spin" style="align-items:center"><input type="checkbox" id="c-spin" style="margin:0"> spin</label>
+      <label class="chk k" for="c-lrot" style="align-items:center"><input type="checkbox" id="c-lrot" checked style="margin:0"> link rotations</label>
+      <button type="button" class="btn" id="btn-strong">Strongest line</button></div>
+    </div>
+    <p class="k" style="margin:4px 0 0">Drag the structure to rotate it. Click the spectrum or any row of the mode table, also those with zero weight, to pick a line. Only atoms that move can contribute, so the strongest line (A₁, Se breathing) is 100 % Se in both rows; pick a weaker line to see the cation share. Ball colors match the shading.</p>
+    <div class="vib" id="vib"></div>
+    <p class="k" id="vib-cap" style="margin-top:8px"></p>
+  </section>
+
+  <section class="panel" id="corner-panel">
+    <details open id="corner-det">
+      <summary id="corner-title">Each ingredient on its own: the eight corners of the cube</summary>
+      <div class="tblwrap"><table id="corner"></table></div>
+      <p class="note" style="margin:8px 0 0" id="corner-note"></p>
+      <div class="tblwrap"><table id="atoms"></table></div>
+      <details id="check-det" style="margin-top:10px"><summary>Check against the <span id="check-src">CRYSTAL output</span>, <span id="check-k">CH</span> cell (all sliders at 1)</summary>
+        <div class="tblwrap"><table id="check"></table></div>
+        <p class="note" style="margin:8px 0 0" id="check-note">I<sub>poly</sub> is the polycrystalline isotropic intensity, 45α² + 7β², in the CRYSTAL normalization (strongest line = 1000, no temperature factor). Frequencies and intensities come out of the reconstructed force constants and dχ/du tensors, so this table tests the reconstruction, not the physics.</p>
+      </details>
+    </details>
+  </section>
+
+  <section class="panel">
+    <details id="tbl">
+      <summary>Mode table for the current sliders (click a row to see that line in the structure view)</summary>
+      <div id="tbody"></div>
+    </details>
+  </section>
+
+  <section class="panel note" id="note-hs">
+    <details>
+      <summary>HSE06 (FHI-aims) data and limits</summary>
+      <p>Source: HSE06 (ω = 0.20 Å⁻¹, α = 0.25) calculations with FHI-aims and phonopy, converted to Quantum ESPRESSO <code>.dyn</code> files: <code>ZnSe_CH.dyn</code> and <code>CuInSe2_CH.dyn</code> (8-atom chalcopyrite cell), <code>ZnSe_Au.dyn</code> and <code>CuInSe2_Au.dyn</code> (4-atom CuAu cell). The ZnSe end is computed directly in each supercell, so nothing is folded or rescaled. Each file gives the Γ force constants (Ry/bohr²), masses, positions and the dχ/du Raman tensors (finite differences of ε, Δ = 0.01 Å). The page runs the <code>dynmat.x</code> pipeline: acoustic sum rule, mass-weighted diagonalization, activity 45α² + 7β², Bose factor at 300 K and Lorentzians as in <code>make_spectrum_om.f90</code>. At all sliders = 1 (and 0) the frequencies agree with <code>dynmat.x</code> to 0.005 cm⁻¹ and the Raman activities to a few parts per million (check table above). With the ZnSe tensor, masses and forces, 100 % of the Raman weight sits in the ZnSe TO at 206.2 cm⁻¹ in both cells.</p>
+      <p>Interpolation: masses (Zn → Cu on the Cu site, Zn → In on the In site), the full force-constant matrix and all dχ/du tensors mix linearly between the ZnSe file (0) and the CuInSe₂ file (1). The atom order and Cartesian frame are the same in both files of a cell. Relaxation (u, c/a, bond lengths) is contained in the force constants, so the dynamical-matrix slider also moves the structure in the ball-and-stick view. The path is not a physical trajectory.</p>
+      <p>Caveats: ε∞ in the <code>.dyn</code> files is experimental (8.6/8.7 for CuInSe₂, the CH value reused for CA; 5.75 for ZnSe) but enters only the LO–TO term, which is not used at q = 0, so the spectra do not depend on it. The k-point meshes of the dielectric calculations are not recorded in the files. No LO–TO splitting, no resonance. The Raman tensors are not forced to obey the acoustic sum rule unless you tick the box.</p>
+    </details>
+  </section>
+
+  <section class="panel note nol10n" id="note-hs-s" hidden>
+    <details>
+      <summary>HSE06 (FHI-aims) data and limits, sulfides</summary>
+      <p>Source: HSE06 (ω = 0.20 Å⁻¹, α = 0.25) calculations with FHI-aims and phonopy, converted to Quantum ESPRESSO <code>.dyn</code> files: <code>ZnS_CH.dyn</code> and <code>CuInS2_CH.dyn</code> (8-atom chalcopyrite cell), <code>ZnS_Au.dyn</code> and <code>CuInS2_Au.dyn</code> (4-atom CuAu cell). As for the selenides, ZnS is computed directly in each supercell (ideal zinc blende, a₀ = 5.419 Å, not relaxed in the supercell), with the same atom order as the CuInS₂ file of that cell. The page runs the same <code>dynmat.x</code> pipeline: acoustic sum rule, mass-weighted diagonalization, activity 45α² + 7β², Bose factor at 300 K, Lorentzians. At all sliders = 1 (and 0) the frequencies agree with <code>dynmat.x</code> to 0.005 cm⁻¹ and the Raman activities to a few parts per million (check table above). With the ZnS tensor, masses and forces, 100 % of the Raman weight sits in the ZnS TO at 275.7 cm⁻¹ (CH cell) or 275.5 cm⁻¹ (CA cell).</p>
+      <p>The zone-edge ZnS levels of the two cells differ by up to 0.4 cm⁻¹ (for example 309.4 against 309.8 cm⁻¹), which reflects the different range of the force constants in the two phonopy supercells.</p>
+      <p>Interpolation: masses (Zn → Cu on the Cu site, Zn → In on the In site), the full force-constant matrix and all dχ/du tensors mix linearly between the ZnS file (0) and the CuInS₂ file (1). Relaxation is contained in the force constants, so the dynamical-matrix slider also moves the structure in the ball-and-stick view. The path is not a physical trajectory.</p>
+      <p>Caveats: ε∞ in the <code>.dyn</code> files (6.64 for CuInS₂ in both cells, 5.1 for ZnS) enters only the LO–TO term, which is not used at q = 0. No LO–TO splitting, no resonance. The phonon-dispersion section is a ZnSe Keating model and is hidden for the sulfides.</p>
+    </details>
+  </section>
+
+  <section class="panel note" id="note-cr" hidden></section>
+
+  <section class="panel note" id="note-ai" hidden></section>
+
+  <section class="panel note" id="note-kv" hidden></section>
+</div>
+
+<script>
+// ---- Keating VFF + Wolkenstein bond-polarizability model (port of ca_fit.py / ca_fit2.py) ----
+const CONV = 521.47;
+const PARAMS = {
+  M: { Zn: 65.38, Cu: 63.546, In: 114.818, Se: 78.971 },
+  znse: { alpha: 2.4566, betaRatio: 0.0625 },              // alpha fitted to ZnSe TO(G)=205 cm-1
+  ch: { aCu: 2.7811, aIn: 4.1711, bCu: 0.294, bIn: 0.0808 }, // fitted to 10 CH-CuInSe2 TO modes
+  tp: [1.0, 0.6, 0.4]
+};
+
+// ---- structures: returns {A (3x3 rows), types[], pos[][]} for geometry parameter g in [0,1] ----
+function lerp(a, b, t) { return a + (b - a) * t; }
+function solveAtoms(A, L, fr) { return fr; }
+
+function buildCH(g) {
+  const a = lerp(5.667, 5.782, g), c = lerp(2 * 5.667, 11.619, g), u = lerp(0.25, 0.224, g);
+  const A = [[a, 0, 0], [0, a, 0], [a / 2, a / 2, c / 2]];
+  const L = [a, a, c];
+  const cu = [[0, 0, 0], [0, .5, .25], [.5, .5, .5], [.5, 0, .75]];
+  const inn = [[0, 0, .5], [0, .5, .75], [.5, .5, 0], [.5, 0, .25]];
+  let se = [[u, .25, .125], [-u, .75, .125], [.75, u, .875], [.25, -u, .875]];
+  se = se.concat(se.map(p => [p[0] + .5, p[1] + .5, p[2] + .5]));
+  const groups = [['c1', cu], ['c2', inn], ['se', se]];
+  const types = [], frs = [];
+  for (const [t, lst] of groups) for (const f of lst) {
+    const p = [f[0] * L[0], f[1] * L[1], f[2] * L[2]];
+    // fractional coordinates in primitive basis: solve A^T x = p
+    const x = solve3T(A, p).map(v => { v = v - Math.floor(v + 1e-9); return v; });
+    let dup = false;
+    for (let k = 0; k < types.length; k++) if (types[k] === t && Math.abs(frs[k][0] - x[0]) < 1e-6 && Math.abs(frs[k][1] - x[1]) < 1e-6 && Math.abs(frs[k][2] - x[2]) < 1e-6) dup = true;
+    if (!dup) { types.push(t); frs.push(x); }
+  }
+  const pos = frs.map(x => [0, 1, 2].map(j => x[0] * A[0][j] + x[1] * A[1][j] + x[2] * A[2][j]));
+  return { A, types, pos };
+}
+function solve3T(A, p) { // solve sum_i x_i A[i] = p  (A rows are lattice vectors)
+  const M = [[A[0][0], A[1][0], A[2][0]], [A[0][1], A[1][1], A[2][1]], [A[0][2], A[1][2], A[2][2]]];
+  const det = M[0][0] * (M[1][1] * M[2][2] - M[1][2] * M[2][1]) - M[0][1] * (M[1][0] * M[2][2] - M[1][2] * M[2][0]) + M[0][2] * (M[1][0] * M[2][1] - M[1][1] * M[2][0]);
+  const inv = [
+    [(M[1][1] * M[2][2] - M[1][2] * M[2][1]), -(M[0][1] * M[2][2] - M[0][2] * M[2][1]), (M[0][1] * M[1][2] - M[0][2] * M[1][1])],
+    [-(M[1][0] * M[2][2] - M[1][2] * M[2][0]), (M[0][0] * M[2][2] - M[0][2] * M[2][0]), -(M[0][0] * M[1][2] - M[0][2] * M[1][0])],
+    [(M[1][0] * M[2][1] - M[1][1] * M[2][0]), -(M[0][0] * M[2][1] - M[0][1] * M[2][0]), (M[0][0] * M[1][1] - M[0][1] * M[1][0])]
+  ];
+  return inv.map(r => (r[0] * p[0] + r[1] * p[1] + r[2] * p[2]) / det);
+}
+const DZ_CA = 0.135;
+function buildCA(g) {
+  const ac = lerp(5.667, 5.782, g), tz = lerp(1.0, 1.005, g), dz = DZ_CA * g;
+  const c = ac * tz;
+  const A = [[ac / 2, ac / 2, 0], [-ac / 2, ac / 2, 0], [0, 0, c]];
+  const types = ['c1', 'c2', 'se', 'se'];
+  const pos = [[0, 0, 0], [ac / 2, 0, c / 2], [ac / 4, ac / 4, c / 4 - dz], [ac / 4, 3 * ac / 4, 3 * c / 4 + dz]];
+  return { A, types, pos };
+}
+// bond topology (image indices) is taken once from the ideal structure, then reused for any g
+function findBonds(S, dmax) {
+  const out = [];
+  const N = S.types.length;
+  for (let i = 0; i < N; i++) {
+    if (S.types[i] === 'se') continue;
+    for (let j = 0; j < N; j++) {
+      if (S.types[j] !== 'se') continue;
+      for (let n0 = -3; n0 <= 3; n0++) for (let n1 = -3; n1 <= 3; n1++) for (let n2 = -3; n2 <= 3; n2++) {
+        const v = [0, 1, 2].map(k => S.pos[j][k] + n0 * S.A[0][k] + n1 * S.A[1][k] + n2 * S.A[2][k] - S.pos[i][k]);
+        if (Math.hypot(v[0], v[1], v[2]) < dmax) out.push([i, j, n0, n1, n2]);
+      }
+    }
+  }
+  return out;
+}
+function bondVectors(S, topo) {
+  return topo.map(([i, j, n0, n1, n2]) => [i, j, [0, 1, 2].map(k => S.pos[j][k] + n0 * S.A[0][k] + n1 * S.A[1][k] + n2 * S.A[2][k] - S.pos[i][k])]);
+}
+
+// structure at geometry g for cell kind; topology from g=0
+function structureFor(kind, g, cache) {
+  const build = kind === 'CH' ? buildCH : buildCA;
+  if (!cache.topo) { cache.topo = findBonds(build(0), 2.6); }
+  const S = build(g);
+  return { S, bonds: bondVectors(S, cache.topo) };
+}
+
+// ---- linear algebra: Jacobi eigen-decomposition of a symmetric matrix (row-major Float64Array n*n) ----
+function jacobi(Ain, n) {
+  const A = Float64Array.from(Ain), V = new Float64Array(n * n);
+  for (let i = 0; i < n; i++) V[i * n + i] = 1;
+  for (let sweep = 0; sweep < 60; sweep++) {
+    let off = 0;
+    for (let p = 0; p < n; p++) for (let q = p + 1; q < n; q++) off += A[p * n + q] * A[p * n + q];
+    if (off < 1e-22) break;
+    for (let p = 0; p < n - 1; p++) for (let q = p + 1; q < n; q++) {
+      const apq = A[p * n + q];
+      if (Math.abs(apq) < 1e-300) continue;
+      const theta = (A[q * n + q] - A[p * n + p]) / (2 * apq);
+      const t = Math.sign(theta || 1) / (Math.abs(theta) + Math.sqrt(theta * theta + 1));
+      const c = 1 / Math.sqrt(t * t + 1), s = t * c;
+      for (let k = 0; k < n; k++) {
+        const akp = A[k * n + p], akq = A[k * n + q];
+        A[k * n + p] = c * akp - s * akq; A[k * n + q] = s * akp + c * akq;
+      }
+      for (let k = 0; k < n; k++) {
+        const apk = A[p * n + k], aqk = A[q * n + k];
+        A[p * n + k] = c * apk - s * aqk; A[q * n + k] = s * apk + c * aqk;
+      }
+      for (let k = 0; k < n; k++) {
+        const vkp = V[k * n + p], vkq = V[k * n + q];
+        V[k * n + p] = c * vkp - s * vkq; V[k * n + q] = s * vkp + c * vkq;
+      }
+    }
+  }
+  const ev = new Float64Array(n);
+  for (let i = 0; i < n; i++) ev[i] = A[i * n + i];
+  const idx = Array.from({ length: n }, (_, i) => i).sort((a, b) => ev[a] - ev[b]);
+  const evs = idx.map(i => ev[i]);
+  const Vs = new Float64Array(n * n);
+  idx.forEach((old, nw) => { for (let k = 0; k < n; k++) Vs[k * n + nw] = V[k * n + old]; });
+  return { ev: evs, V: Vs };
+}
+
+// ---- Hessian: stretch (per cation type) + bend (per centre) ----
+function hessian(types, bonds, al, be) {
+  const N = types.length, n = 3 * N;
+  const H = new Float64Array(n * n);
+  const addOuter = (J, coef) => { for (let a = 0; a < n; a++) { if (J[a] === 0) continue; for (let b = 0; b < n; b++) H[a * n + b] += coef * J[a] * J[b]; } };
+  const nb = Array.from({ length: N }, () => []);
+  for (const [i, j, v] of bonds) {
+    nb[i].push([j, v]); nb[j].push([i, v.map(x => -x)]);
+    const d2 = v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
+    const J = new Float64Array(n);
+    for (let k = 0; k < 3; k++) { J[3 * j + k] += 2 * v[k]; J[3 * i + k] -= 2 * v[k]; }
+    addOuter(J, 2 * (3 * al[types[i]] / (16 * d2)));
+  }
+  for (let c = 0; c < N; c++) {
+    const list = nb[c];
+    for (let p = 0; p < list.length; p++) for (let q = p + 1; q < list.length; q++) {
+      const [a_, ra] = list[p], [b_, rb] = list[q];
+      const b = types[c] === 'se' ? 0.5 * (be[types[a_]] + be[types[b_]]) : be[types[c]];
+      const J = new Float64Array(n);
+      for (let k = 0; k < 3; k++) { J[3 * a_ + k] += rb[k]; J[3 * b_ + k] += ra[k]; J[3 * c + k] -= ra[k] + rb[k]; }
+      addOuter(J, 2 * (3 * b / (8 * Math.hypot(...ra) * Math.hypot(...rb))));
+    }
+  }
+  return H;
+}
+
+// ---- Raman derivative tensor P (9 x 3N) ----
+function ramanP(types, bonds, s, tp) {
+  const N = types.length, n = 3 * N;
+  const P = Array.from({ length: 9 }, () => new Float64Array(n));
+  const [a1, a2, a3] = tp;
+  for (const [i, j, v] of bonds) {
+    const r = Math.hypot(...v), nv = v.map(x => x / r);
+    for (const [atom, sg] of [[j, 1], [i, -1]]) for (let g = 0; g < 3; g++) {
+      const e = [0, 0, 0]; e[g] = 1;
+      const ne = nv[0] * e[0] + nv[1] * e[1] + nv[2] * e[2];
+      const dr = sg * ne;
+      const dn = e.map((x, k) => sg * (x - nv[k] * ne) / r);
+      for (let a = 0; a < 3; a++) for (let b = 0; b < 3; b++) {
+        const dchi = (a1 * (a === b ? 1 : 0) + a2 * (nv[a] * nv[b] - (a === b ? 1 / 3 : 0))) * dr + a3 * r * (nv[a] * dn[b] + dn[a] * nv[b]);
+        P[3 * a + b][3 * atom + g] += s[types[i]] * dchi;
+      }
+    }
+  }
+  return P;
+}
+
+// ---- one evaluation: returns grouped levels [{f, deg, I, w}] (I = sum |R|^2 of the group, w = mean ZB-Gamma weight)
+function evaluate(kind, ctrl, cache) {
+  // ctrl: {mass, dmat, geom, tens, dStar}  each in [0,1]; dStar = delta at tens=1
+  const { S, bonds } = structureFor(kind, ctrl.geom, cache);
+  const types = S.types, N = types.length, n = 3 * N;
+  const M = PARAMS.M;
+  const mass = { c1: lerp(M.Zn, M.Cu, ctrl.mass), c2: lerp(M.Zn, M.In, ctrl.mass), se: M.Se };
+  const aZ = PARAMS.znse.alpha, bZ = PARAMS.znse.alpha * PARAMS.znse.betaRatio, C = PARAMS.ch;
+  const al = { c1: lerp(aZ, C.aCu, ctrl.dmat), c2: lerp(aZ, C.aIn, ctrl.dmat), se: 0 };
+  const be = { c1: lerp(bZ, C.bCu, ctrl.dmat), c2: lerp(bZ, C.bIn, ctrl.dmat), se: 0 };
+  const d = ctrl.tens * ctrl.dStar;
+  const s = { c1: 1 + d, c2: 1 - d };
+  const H = hessian(types, bonds, al, be);
+  const m = []; for (let k = 0; k < N; k++) for (let x = 0; x < 3; x++) m.push(mass[types[k]]);
+  const D = new Float64Array(n * n);
+  for (let a = 0; a < n; a++) for (let b = 0; b < n; b++) D[a * n + b] = H[a * n + b] / Math.sqrt(m[a] * m[b]);
+  const { ev, V } = jacobi(D, n);
+  const P = ramanP(types, bonds, s, PARAMS.tp);
+  // ZB Gamma subspace: rigid cation and rigid anion translations (mass weighted)
+  const Svec = [];
+  for (const sub of [t => t !== 'se', t => t === 'se']) for (let g = 0; g < 3; g++) {
+    const v = new Float64Array(n); let nn = 0;
+    for (let k = 0; k < N; k++) if (sub(types[k])) { v[3 * k + g] = Math.sqrt(mass[types[k]]); nn += mass[types[k]]; }
+    for (let a = 0; a < n; a++) v[a] /= Math.sqrt(nn);
+    Svec.push(v);
+  }
+  const modes = [];
+  for (let q = 3; q < n; q++) {
+    // R_ab = sum_c P[ab][c] * V[c][q] / sqrt(m_c)
+    let I = 0;
+    for (let ab = 0; ab < 9; ab++) { let r = 0; for (let c = 0; c < n; c++) r += P[ab][c] * V[c * n + q] / Math.sqrt(m[c]); I += r * r; }
+    let w = 0;
+    for (const sv of Svec) { let dot = 0; for (let c = 0; c < n; c++) dot += sv[c] * V[c * n + q]; w += dot * dot; }
+    modes.push({ ev: ev[q], I, w });
+  }
+  // group degenerate levels like the Python code
+  const groups = []; let cur = [modes[0]];
+  for (let k = 1; k < modes.length; k++) {
+    if (modes[k].ev - cur[cur.length - 1].ev < 1e-7 * Math.max(modes[k].ev, 1e-9) + 1e-9) cur.push(modes[k]);
+    else { groups.push(cur); cur = [modes[k]]; }
+  }
+  groups.push(cur);
+  return groups.map(g => ({
+    f: CONV * Math.sqrt(Math.max(g[0].ev, 0)), deg: g.length,
+    I: g.reduce((a, b) => a + b.I, 0), w: g.reduce((a, b) => a + b.w, 0) / g.length
+  }));
+}
+function foldedIntensity(levels) { return levels.reduce((a, l) => a + l.I * (1 - l.w), 0); }
+function totalIntensity(levels) { return levels.reduce((a, l) => a + l.I, 0); }
+
+if (typeof module !== 'undefined') module.exports = { evaluate, foldedIntensity, totalIntensity, PARAMS };
+
+const AI = null;   // not included in the Supplemental-Material version (HSE06 only)
+
+// ---- shared helpers: species-resolved Raman weight (vibrational character and tensor share) ----
+function ramanB(A, B) {   // bilinear form behind 45 a^2 + 7 b^2
+  const a1 = (A[0] + A[4] + A[8]) / 3, a2 = (B[0] + B[4] + B[8]) / 3;
+  const b = 0.5 * ((A[0] - A[4]) * (B[0] - B[4]) + (A[4] - A[8]) * (B[4] - B[8]) + (A[8] - A[0]) * (B[8] - B[0]) + 6 * (A[1] * B[1] + A[2] * B[2] + A[5] * B[5]));
+  return 45 * a1 * a2 + 7 * b;
+}
+function groupModes(modes) {
+  const groups = []; let cur = [modes[0]];
+  for (let k = 1; k < modes.length; k++) {
+    if (modes[k].ev - cur[cur.length - 1].ev < 2e-4 * Math.max(modes[k].ev, 1)) cur.push(modes[k]);
+    else { groups.push(cur); cur = [modes[k]]; }
+  }
+  groups.push(cur);
+  return groups.map(g => {
+    const I = g.reduce((a, b) => a + b.I, 0), best = g.reduce((a, b) => (b.I > a.I ? b : a), g[0]);
+    const p = [0, 0, 0], Is = [0, 0, 0];
+    g.forEach(x => { for (let s = 0; s < 3; s++) { p[s] += (I > 0 ? x.I / I : 1 / g.length) * x.p[s]; Is[s] += x.Is[s]; } });
+    return { f: g.reduce((a, b) => a + b.ev, 0) / g.length, deg: g.length, I, w: g.reduce((a, b) => a + b.w, 0) / g.length, p, Is, vec: best.vec, vecs: best.vec ? g.map(x => x.vec) : null };
+  });
+}
+
+// ---- Ab initio (Quantum ESPRESSO) endpoints: force constants, masses and dchi/du tensors of the 8-atom cell ----
+// Interpolation: masses (amu), force constants F (Ry/bohr^2, after ASR) and Raman tensors R linearly between ZnSe (0) and CuInSe2/CuGaSe2 (1).
+const AI_RY = 109737.31568, AI_AMU = 911.44424310865, AI_K = 8.3073e5, AI_TCM = 8.065610 * 0.08621738 * 300;
+function evaluateAI(ctrl) {
+  const n = 24, N = 8;
+  const tm = ctrl.mass, td = ctrl.dmat, tr = ctrl.tens;
+  const mm = [0, 1, 2].map(k => lerp(AI.mZ[k], AI.mC[k], tm));
+  const m = []; for (let a = 0; a < N; a++) for (let g = 0; g < 3; g++) m.push(mm[AI.types[a]]);
+  const D = new Float64Array(n * n);
+  for (let a = 0; a < n; a++) for (let b = 0; b < n; b++) {
+    const F = lerp(AI.Z.F[a][b], AI.C.F[a][b], td);
+    D[a * n + b] = F / Math.sqrt(m[a] * m[b]) / AI_AMU * AI_RY * AI_RY / 1e4;   // units (100 cm-1)^2
+  }
+  const { ev, V } = jacobi(D, n);
+  // ctrl.rw = optional per-species tensor weights [Cu, In, Se] (default: all equal to ctrl.tens)
+  const rw = ctrl.rw || [tr, tr, tr];
+  const R = []; for (let r = 0; r < n; r++) { const at = Math.floor(r / 3), w = at < 2 ? rw[0] : at < 4 ? rw[1] : rw[2]; R.push(AI.Z.R[r].map((v, k) => lerp(v, AI.C.R[r][k], w))); }
+  if (ctrl.asrR) for (let g = 0; g < 3; g++) for (let k = 0; k < 9; k++) { let mean = 0; for (let a = 0; a < N; a++) mean += R[3 * a + g][k]; mean /= N; for (let a = 0; a < N; a++) R[3 * a + g][k] -= mean; }
+  // ZB Gamma subspace (rigid cation / rigid anion translations, mass weighted)
+  const Svec = [];
+  for (const sub of [t => t !== 2, t => t === 2]) for (let g = 0; g < 3; g++) {
+    const v = new Float64Array(n); let nn = 0;
+    for (let k = 0; k < N; k++) if (sub(AI.types[k])) { v[3 * k + g] = Math.sqrt(m[3 * k]); nn += m[3 * k]; }
+    for (let a = 0; a < n; a++) v[a] /= Math.sqrt(nn);
+    Svec.push(v);
+  }
+  const modes = [];
+  for (let q = 3; q < n; q++) {
+    const f = 100 * Math.sqrt(Math.max(ev[q], 0));
+    const A = new Float64Array(9), As = [new Float64Array(9), new Float64Array(9), new Float64Array(9)], p = [0, 0, 0], vec = new Float64Array(n);
+    for (let c = 0; c < n; c++) {
+      const t = AI.types[Math.floor(c / 3)], u = V[c * n + q] / (Math.sqrt(m[c]) * AI_AMU); vec[c] = u; p[t] += V[c * n + q] ** 2;
+      for (let k = 0; k < 9; k++) { const x = u * R[c][k]; A[k] += x; As[t][k] += x; }
+    }
+    const bose = f > 1 ? AI_TCM / ((1 - Math.exp(-f / AI_TCM)) * f) : 1;       // as in make_spectrum_om.f90 (T = 300 K)
+    const I = AI_K * ramanB(A, A) * bose, Is = As.map(x => AI_K * ramanB(x, A) * bose);
+    let w = 0;
+    for (const sv of Svec) { let dot = 0; for (let c = 0; c < n; c++) dot += sv[c] * V[c * n + q]; w += dot * dot; }
+    modes.push({ ev: f, I, w, p, Is, vec });
+  }
+  return groupModes(modes);
+}
+
+function rNormsAI(tens) {         // same for the QE cell, species order [Cu, In, Se]
+  const N = 8, acc = [0, 0, 0], cnt = [0, 0, 0];
+  for (let a = 0; a < N; a++) { let s2 = 0; for (let g = 0; g < 3; g++) for (let k = 0; k < 9; k++) { const v = lerp(AI.Z.R[3 * a + g][k], AI.C.R[3 * a + g][k], tens); s2 += v * v; } acc[AI.types[a]] += Math.sqrt(s2); cnt[AI.types[a]]++; }
+  return acc.map((v, i) => v / cnt[i]);
+}
+
+const GEO = null;   // not included in the Supplemental-Material version (HSE06 only)
+
+const CRD = null;   // not included in the Supplemental-Material version (HSE06 only)
+
+// ---- CRYSTAL (PBE0) endpoints in the CA (4-atom) and CH (8-atom) cells ----
+// Ends: ZnSe force constants F (amu*(100 cm-1)^2) and dchi/du R (rows: 3N Cartesian displacements, 9 tensor components) vs the CRYSTAL CuInSe2 ones; masses in amu.
+function evaluateCR(kind, ctrl) {
+  const D0 = CRD[kind], n = D0.N, N = n / 3, ty = D0.types;
+  const mm = [0, 1, 2].map(k => lerp(D0.mZ[k], D0.mC[k], ctrl.mass));
+  const m = []; for (let a = 0; a < N; a++) for (let g = 0; g < 3; g++) m.push(mm[ty[a]]);
+  const D = new Float64Array(n * n);
+  for (let a = 0; a < n; a++) for (let b = 0; b < n; b++) D[a * n + b] = lerp(D0.FZ[a][b], D0.FC[a][b], ctrl.dmat) / Math.sqrt(m[a] * m[b]);
+  const { ev, V } = jacobi(D, n);
+  const rw = ctrl.rw || [ctrl.tens, ctrl.tens, ctrl.tens];          // per species [In, Cu, Se]
+  const R = []; for (let r = 0; r < n; r++) { const w = rw[ty[Math.floor(r / 3)]]; R.push(D0.RZ[r].map((v, k) => lerp(v, D0.RC[r][k], w))); }
+  if (ctrl.asrR) for (let g = 0; g < 3; g++) for (let k = 0; k < 9; k++) { let mean = 0; for (let a = 0; a < N; a++) mean += R[3 * a + g][k]; mean /= N; for (let a = 0; a < N; a++) R[3 * a + g][k] -= mean; }
+  const Svec = [];
+  for (const sub of [t => t !== 2, t => t === 2]) for (let g = 0; g < 3; g++) {
+    const v = new Float64Array(n); let nn = 0;
+    for (let k = 0; k < N; k++) if (sub(ty[k])) { v[3 * k + g] = Math.sqrt(m[3 * k]); nn += m[3 * k]; }
+    for (let a = 0; a < n; a++) v[a] /= Math.sqrt(nn);
+    Svec.push(v);
+  }
+  const modes = [];
+  for (let q = 3; q < n; q++) {
+    const f = 100 * Math.sqrt(Math.max(ev[q], 0));
+    const A = new Float64Array(9), As = [new Float64Array(9), new Float64Array(9), new Float64Array(9)], p = [0, 0, 0], vec = new Float64Array(n);
+    for (let c = 0; c < n; c++) {
+      const t = ty[Math.floor(c / 3)], u = V[c * n + q] / Math.sqrt(m[c]); vec[c] = u; p[t] += V[c * n + q] ** 2;
+      for (let k = 0; k < 9; k++) { const x = u * R[c][k]; A[k] += x; As[t][k] += x; }
+    }
+    let I = ramanB(A, A), bose = (!ctrl.nobose && f > 1) ? AI_TCM / ((1 - Math.exp(-f / AI_TCM)) * f) : 1;
+    const Is = As.map(x => ramanB(x, A) * bose); I *= bose;
+    let w = 0;
+    for (const sv of Svec) { let dot = 0; for (let c = 0; c < n; c++) dot += sv[c] * V[c * n + q]; w += dot * dot; }
+    modes.push({ ev: f, I, w, p, Is, vec });
+  }
+  return groupModes(modes);
+}
+
+function rNormsCR(kind, tens) {   // mean |dchi/du| (Frobenius norm of the 3x9 block) per atom of each species [In, Cu, Se]
+  const D0 = CRD[kind], n = D0.N, N = n / 3, acc = [0, 0, 0], cnt = [0, 0, 0];
+  for (let a = 0; a < N; a++) { let s2 = 0; for (let g = 0; g < 3; g++) for (let k = 0; k < 9; k++) { const v = lerp(D0.RZ[3 * a + g][k], D0.RC[3 * a + g][k], tens); s2 += v * v; } acc[D0.types[a]] += Math.sqrt(s2); cnt[D0.types[a]]++; }
+  return acc.map((v, i) => v / cnt[i]);
+}
+
+// ---- HSE06 (FHI-aims + phonopy) endpoints, ZnSe and CuInSe2 computed in the same CA (4-atom) and CH (8-atom) cells ----
+// From ZnSe_CH.dyn / CuInSe2_CH.dyn and ZnSe_Au.dyn / CuInSe2_Au.dyn: force constants F (Ry/bohr^2, after ASR), dchi/du R (3N x 9), masses (amu).
+// Species order of types: [Cu site, In site, Se]. ref = dynmat.x levels of the CuInSe2 end [freq, degeneracy, summed Raman activity].
+const HSD_SE = {"CH":{"N":24,"types":[0,0,1,1,2,2,2,2],"mZ":[65.38,65.38,78.971],"mC":[63.546,114.818,78.971],"Z":{"F":[[0.12251553,0.0,-0.0,0.00422101,0.01236015,0.0,-0.01586363,0.0,-0.0,0.00422101,-0.01236015,-0.0,-0.02877348,0.02561221,0.02340367,-0.02877348,0.02561221,-0.02340367,-0.02877348,-0.02561221,-0.02340367,-0.02877348,-0.02561221,0.02340367],[0.0,0.12251553,-0.0,-0.01236015,0.00422101,-0.0,0.0,-0.01586363,-0.0,0.01236015,0.00422101,0.0,0.02561221,-0.02877348,-0.02340367,0.02561221,-0.02877348,0.02340367,-0.02561221,-0.02877348,-0.02340367,-0.02561221,-0.02877348,0.02340367],[-0.0,-0.0,0.12838833,-0.0,0.0,-0.02168535,-0.0,-0.0,0.03007629,0.0,-0.0,-0.02168535,0.02647788,-0.02647788,-0.02877348,-0.02647788,0.02647788,-0.02877348,-0.02647788,-0.02647788,-0.02877348,0.02647788,0.02647788,-0.02877348],[0.00422101,-0.01236015,-0.0,0.12251553,0.0,-0.0,0.00422101,0.01236015,0.0,-0.01586363,0.0,-0.0,-0.02877348,-0.02561221,-0.02340367,-0.02877348,-0.02561221,0.02340367,-0.02877348,0.02561221,-0.02340367,-0.02877348,0.02561221,0.02340367],[0.01236015,0.00422101,0.0,0.0,0.12251553,-0.0,-0.01236015,0.00422101,-0.0,0.0,-0.01586363,0.0,-0.02561221,-0.02877348,-0.02340367,-0.02561221,-0.02877348,0.02340367,0.02561221,-0.02877348,0.02340367,0.02561221,-0.02877348,-0.02340367],[0.0,-0.0,-0.02168535,-0.0,-0.0,0.12838833,-0.0,0.0,-0.02168535,-0.0,0.0,0.03007629,-0.02647788,-0.02647788,-0.02877348,0.02647788,0.02647788,-0.02877348,-0.02647788,0.02647788,-0.02877348,0.02647788,-0.02647788,-0.02877348],[-0.01586363,0.0,-0.0,0.00422101,-0.01236015,-0.0,0.12251553,0.0,-0.0,0.00422101,0.01236015,0.0,-0.02877348,0.02561221,-0.02340367,-0.02877348,0.02561221,0.02340367,-0.02877348,-0.02561221,0.02340367,-0.02877348,-0.02561221,-0.02340367],[0.0,-0.01586363,-0.0,0.01236015,0.00422101,0.0,0.0,0.12251553,-0.0,-0.01236015,0.00422101,-0.0,0.02561221,-0.02877348,0.02340367,0.02561221,-0.02877348,-0.02340367,-0.02561221,-0.02877348,0.02340367,-0.02561221,-0.02877348,-0.02340367],[-0.0,-0.0,0.03007629,0.0,-0.0,-0.02168535,-0.0,-0.0,0.12838833,-0.0,0.0,-0.02168535,-0.02647788,0.02647788,-0.02877348,0.02647788,-0.02647788,-0.02877348,0.02647788,0.02647788,-0.02877348,-0.02647788,-0.02647788,-0.02877348],[0.00422101,0.01236015,0.0,-0.01586363,0.0,-0.0,0.00422101,-0.01236015,-0.0,0.12251553,0.0,-0.0,-0.02877348,-0.02561221,0.02340367,-0.02877348,-0.02561221,-0.02340367,-0.02877348,0.02561221,0.02340367,-0.02877348,0.02561221,-0.02340367],[-0.01236015,0.00422101,-0.0,0.0,-0.01586363,0.0,0.01236015,0.00422101,0.0,0.0,0.12251553,0.0,-0.02561221,-0.02877348,0.02340367,-0.02561221,-0.02877348,-0.02340367,0.02561221,-0.02877348,-0.02340367,0.02561221,-0.02877348,0.02340367],[-0.0,0.0,-0.02168535,-0.0,0.0,0.03007629,0.0,-0.0,-0.02168535,-0.0,0.0,0.12838833,0.02647788,0.02647788,-0.02877348,-0.02647788,-0.02647788,-0.02877348,0.02647788,-0.02647788,-0.02877348,-0.02647788,0.02647788,-0.02877348],[-0.02877348,0.02561221,0.02647788,-0.02877348,-0.02561221,-0.02647788,-0.02877348,0.02561221,-0.02647788,-0.02877348,-0.02561221,0.02647788,0.17709026,-0.0,-0.0,-0.03090906,0.0,-0.0,-0.01554364,-0.0059994,-0.0,-0.01554364,0.0059994,-0.0],[0.02561221,-0.02877348,-0.02647788,-0.02561221,-0.02877348,-0.02647788,0.02561221,-0.02877348,0.02647788,-0.02561221,-0.02877348,0.02647788,-0.0,0.17709026,-0.0,0.0,-0.03090906,0.0,0.0059994,-0.01554364,-0.0,-0.0059994,-0.01554364,0.0],[0.02340367,-0.02340367,-0.02877348,-0.02340367,-0.02340367,-0.02877348,-0.02340367,0.02340367,-0.02877348,0.02340367,0.02340367,-0.02877348,-0.0,-0.0,0.17918457,-0.0,0.0,-0.00763107,-0.0,0.0,-0.02822979,-0.0,0.0,-0.02822979],[-0.02877348,0.02561221,-0.02647788,-0.02877348,-0.02561221,0.02647788,-0.02877348,0.02561221,0.02647788,-0.02877348,-0.02561221,-0.02647788,-0.03090906,0.0,-0.0,0.17709026,0.0,-0.0,-0.01554364,0.0059994,-0.0,-0.01554364,-0.0059994,-0.0],[0.02561221,-0.02877348,0.02647788,-0.02561221,-0.02877348,0.02647788,0.02561221,-0.02877348,-0.02647788,-0.02561221,-0.02877348,-0.02647788,0.0,-0.03090906,0.0,0.0,0.17709026,-0.0,-0.0059994,-0.01554364,0.0,0.0059994,-0.01554364,0.0],[-0.02340367,0.02340367,-0.02877348,0.02340367,0.02340367,-0.02877348,0.02340367,-0.02340367,-0.02877348,-0.02340367,-0.02340367,-0.02877348,-0.0,0.0,-0.00763107,-0.0,-0.0,0.17918457,-0.0,0.0,-0.02822979,-0.0,0.0,-0.02822979],[-0.02877348,-0.02561221,-0.02647788,-0.02877348,0.02561221,-0.02647788,-0.02877348,-0.02561221,0.02647788,-0.02877348,0.02561221,0.02647788,-0.01554364,0.0059994,-0.0,-0.01554364,-0.0059994,-0.0,0.17709026,0.0,0.0,-0.03090906,-0.0,-0.0],[-0.02561221,-0.02877348,-0.02647788,0.02561221,-0.02877348,0.02647788,-0.02561221,-0.02877348,0.02647788,0.02561221,-0.02877348,-0.02647788,-0.0059994,-0.01554364,0.0,0.0059994,-0.01554364,0.0,0.0,0.17709026,-0.0,-0.0,-0.03090906,0.0],[-0.02340367,-0.02340367,-0.02877348,-0.02340367,0.02340367,-0.02877348,0.02340367,0.02340367,-0.02877348,0.02340367,-0.02340367,-0.02877348,-0.0,-0.0,-0.02822979,-0.0,0.0,-0.02822979,0.0,-0.0,0.17918457,-0.0,0.0,-0.00763107],[-0.02877348,-0.02561221,0.02647788,-0.02877348,0.02561221,0.02647788,-0.02877348,-0.02561221,-0.02647788,-0.02877348,0.02561221,-0.02647788,-0.01554364,-0.0059994,-0.0,-0.01554364,0.0059994,-0.0,-0.03090906,-0.0,-0.0,0.17709026,0.0,-0.0],[-0.02561221,-0.02877348,0.02647788,0.02561221,-0.02877348,-0.02647788,-0.02561221,-0.02877348,-0.02647788,0.02561221,-0.02877348,0.02647788,0.0059994,-0.01554364,0.0,-0.0059994,-0.01554364,0.0,-0.0,-0.03090906,0.0,0.0,0.17709026,-0.0],[0.02340367,0.02340367,-0.02877348,0.02340367,-0.02340367,-0.02877348,-0.02340367,-0.02340367,-0.02877348,-0.02340367,0.02340367,-0.02877348,-0.0,0.0,-0.02822979,-0.0,0.0,-0.02822979,-0.0,0.0,-0.00763107,-0.0,-0.0,0.17918457]],"R":[[0.0,0.0,0.0,0.0,0.0,0.825267,0.0,0.825267,0.0],[0.0,0.0,0.825267,0.0,0.0,0.0,0.825267,0.0,0.0],[0.0,0.835787,0.0,0.835787,0.0,0.0,0.0,0.0,0.0],[0.0,0.0,0.0,0.0,0.0,0.825267,0.0,0.825267,0.0],[0.0,0.0,0.825267,0.0,0.0,0.0,0.825267,0.0,0.0],[0.0,0.835787,0.0,0.835787,0.0,0.0,0.0,0.0,0.0],[0.0,0.0,0.0,0.0,0.0,0.825267,0.0,0.825267,0.0],[0.0,0.0,0.825267,0.0,0.0,0.0,0.825267,0.0,0.0],[0.0,0.835787,0.0,0.835787,0.0,0.0,0.0,0.0,0.0],[0.0,0.0,0.0,0.0,0.0,0.825267,0.0,0.825267,0.0],[0.0,0.0,0.825267,0.0,0.0,0.0,0.825267,0.0,0.0],[0.0,0.835787,0.0,0.835787,0.0,0.0,0.0,0.0,0.0],[0.0,0.0,0.0,0.0,0.0,-0.82425,0.0,-0.82425,0.0],[0.0,0.0,-0.82425,0.0,0.0,0.0,-0.82425,0.0,0.0],[0.0,-0.835813,0.0,-0.835813,0.0,0.0,0.0,0.0,0.0],[0.0,0.0,0.0,0.0,0.0,-0.82425,0.0,-0.82425,0.0],[0.0,0.0,-0.82425,0.0,0.0,0.0,-0.82425,0.0,0.0],[0.0,-0.835813,0.0,-0.835813,0.0,0.0,0.0,0.0,0.0],[0.0,0.0,0.0,0.0,0.0,-0.82425,0.0,-0.82425,0.0],[0.0,0.0,-0.82425,0.0,0.0,0.0,-0.82425,0.0,0.0],[0.0,-0.835813,0.0,-0.835813,0.0,0.0,0.0,0.0,0.0],[0.0,0.0,0.0,0.0,0.0,-0.82425,0.0,-0.82425,0.0],[0.0,0.0,-0.82425,0.0,0.0,0.0,-0.82425,0.0,0.0],[0.0,-0.835813,0.0,-0.835813,0.0,0.0,0.0,0.0,0.0]]},"C":{"F":[[0.06525673,0.0,-0.0,0.00140304,0.00379554,-0.0,-0.00984128,0.00030017,-0.0,0.00203987,-0.00876889,0.0,-0.01047534,0.01649,0.0159311,-0.01047534,0.01649,-0.0159311,-0.01895384,-0.0141533,-0.01791154,-0.01895384,-0.0141533,0.01791154],[0.0,0.06525673,-0.0,-0.00379554,0.00140304,-0.0,-0.00030017,-0.00984128,0.0,0.00876889,0.00203987,0.0,0.0141533,-0.01895384,-0.01791154,0.0141533,-0.01895384,0.01791154,-0.01649,-0.01047534,-0.0159311,-0.01649,-0.01047534,0.0159311],[-0.0,-0.0,0.07449929,-0.0,-0.0,-0.00508043,0.0,0.0,0.01691933,0.0,0.0,-0.01227323,0.01496211,-0.019223,-0.01851624,-0.01496211,0.019223,-0.01851624,-0.019223,-0.01496211,-0.01851624,0.019223,0.01496211,-0.01851624],[0.00140304,-0.00379554,-0.0,0.06525673,0.0,-0.0,0.00203987,0.00876889,0.0,-0.00984128,-0.00030017,-0.0,-0.01047534,-0.01649,-0.0159311,-0.01047534,-0.01649,0.0159311,-0.01895384,0.0141533,-0.01791154,-0.01895384,0.0141533,0.01791154],[0.00379554,0.00140304,-0.0,0.0,0.06525673,0.0,-0.00876889,0.00203987,-0.0,0.00030017,-0.00984128,-0.0,-0.0141533,-0.01895384,-0.01791154,-0.0141533,-0.01895384,0.01791154,0.01649,-0.01047534,0.0159311,0.01649,-0.01047534,-0.0159311],[-0.0,-0.0,-0.00508043,-0.0,0.0,0.07449929,0.0,-0.0,-0.01227323,0.0,0.0,0.01691933,-0.01496211,-0.019223,-0.01851624,0.01496211,0.019223,-0.01851624,-0.019223,0.01496211,-0.01851624,0.019223,-0.01496211,-0.01851624],[-0.00984128,-0.00030017,0.0,0.00203987,-0.00876889,0.0,0.17331394,-0.0,-0.0,0.00323881,0.01954863,0.0,-0.05045983,0.03527725,-0.03371724,-0.05045983,0.03527725,0.03371724,-0.03391584,-0.04051691,0.03029537,-0.03391584,-0.04051691,-0.03029537],[0.00030017,-0.00984128,0.0,0.00876889,0.00203987,-0.0,-0.0,0.17331394,0.0,-0.01954863,0.00323881,0.0,0.04051691,-0.03391584,0.03029537,0.04051691,-0.03391584,-0.03029537,-0.03527725,-0.05045983,0.03371724,-0.03527725,-0.05045983,-0.03371724],[-0.0,0.0,0.01691933,0.0,-0.0,-0.01227323,-0.0,0.0,0.17013227,0.0,0.0,-0.04000697,-0.03922674,0.03335874,-0.03369285,0.03922674,-0.03335874,-0.03369285,0.03335874,0.03922674,-0.03369285,-0.03335874,-0.03922674,-0.03369285],[0.00203987,0.00876889,0.0,-0.00984128,0.00030017,0.0,0.00323881,-0.01954863,0.0,0.17331394,0.0,-0.0,-0.05045983,-0.03527725,0.03371724,-0.05045983,-0.03527725,-0.03371724,-0.03391584,0.04051691,0.03029537,-0.03391584,0.04051691,-0.03029537],[-0.00876889,0.00203987,0.0,-0.00030017,-0.00984128,0.0,0.01954863,0.00323881,0.0,0.0,0.17331394,-0.0,-0.04051691,-0.03391584,0.03029537,-0.04051691,-0.03391584,-0.03029537,0.03527725,-0.05045983,-0.03371724,0.03527725,-0.05045983,0.03371724],[0.0,0.0,-0.01227323,-0.0,-0.0,0.01691933,0.0,0.0,-0.04000697,-0.0,-0.0,0.17013227,0.03922674,0.03335874,-0.03369285,-0.03922674,-0.03335874,-0.03369285,0.03335874,-0.03922674,-0.03369285,-0.03335874,0.03922674,-0.03369285],[-0.01047534,0.0141533,0.01496211,-0.01047534,-0.0141533,-0.01496211,-0.05045983,0.04051691,-0.03922674,-0.05045983,-0.04051691,0.03922674,0.16978082,0.0,-0.0,-0.02145986,0.0,-0.0,-0.01322531,-0.00577263,0.00122445,-0.01322531,0.00577263,-0.00122445],[0.01649,-0.01895384,-0.019223,-0.01649,-0.01895384,-0.019223,0.03527725,-0.03391584,0.03335874,-0.03527725,-0.03391584,0.03335874,0.0,0.1592456,-0.0265399,0.0,-0.02705562,0.00067644,0.00392151,-0.01322531,-0.00120412,-0.00392151,-0.01322531,-0.00120412],[0.0159311,-0.01791154,-0.01851624,-0.0159311,-0.01791154,-0.01851624,-0.03371724,0.03029537,-0.03369285,0.03371724,0.03029537,-0.03369285,-0.0,-0.0265399,0.16232374,-0.0,-0.00067644,-0.00812768,-0.00120412,0.00122445,-0.02488894,0.00120412,0.00122445,-0.02488894],[-0.01047534,0.0141533,-0.01496211,-0.01047534,-0.0141533,0.01496211,-0.05045983,0.04051691,0.03922674,-0.05045983,-0.04051691,-0.03922674,-0.02145986,0.0,-0.0,0.16978082,0.0,-0.0,-0.01322531,0.00577263,0.00122445,-0.01322531,-0.00577263,-0.00122445],[0.01649,-0.01895384,0.019223,-0.01649,-0.01895384,0.019223,0.03527725,-0.03391584,-0.03335874,-0.03527725,-0.03391584,-0.03335874,0.0,-0.02705562,-0.00067644,0.0,0.1592456,0.0265399,-0.00392151,-0.01322531,0.00120412,0.00392151,-0.01322531,0.00120412],[-0.0159311,0.01791154,-0.01851624,0.0159311,0.01791154,-0.01851624,0.03371724,-0.03029537,-0.03369285,-0.03371724,-0.03029537,-0.03369285,-0.0,0.00067644,-0.00812768,-0.0,0.0265399,0.16232374,-0.00120412,-0.00122445,-0.02488894,0.00120412,-0.00122445,-0.02488894],[-0.01895384,-0.01649,-0.019223,-0.01895384,0.01649,-0.019223,-0.03391584,-0.03527725,0.03335874,-0.03391584,0.03527725,0.03335874,-0.01322531,0.00392151,-0.00120412,-0.01322531,-0.00392151,-0.00120412,0.1592456,0.0,-0.0265399,-0.02705562,0.0,0.00067644],[-0.0141533,-0.01047534,-0.01496211,0.0141533,-0.01047534,0.01496211,-0.04051691,-0.05045983,0.03922674,0.04051691,-0.05045983,-0.03922674,-0.00577263,-0.01322531,0.00122445,0.00577263,-0.01322531,-0.00122445,0.0,0.16978082,-0.0,0.0,-0.02145986,0.0],[-0.01791154,-0.0159311,-0.01851624,-0.01791154,0.0159311,-0.01851624,0.03029537,0.03371724,-0.03369285,0.03029537,-0.03371724,-0.03369285,0.00122445,-0.00120412,-0.02488894,0.00122445,0.00120412,-0.02488894,-0.0265399,-0.0,0.16232374,-0.00067644,-0.0,-0.00812768],[-0.01895384,-0.01649,0.019223,-0.01895384,0.01649,0.019223,-0.03391584,-0.03527725,-0.03335874,-0.03391584,0.03527725,-0.03335874,-0.01322531,-0.00392151,0.00120412,-0.01322531,0.00392151,0.00120412,-0.02705562,0.0,-0.00067644,0.1592456,0.0,0.0265399],[-0.0141533,-0.01047534,0.01496211,0.0141533,-0.01047534,-0.01496211,-0.04051691,-0.05045983,-0.03922674,0.04051691,-0.05045983,0.03922674,0.00577263,-0.01322531,0.00122445,-0.00577263,-0.01322531,-0.00122445,0.0,-0.02145986,-0.0,0.0,0.16978082,0.0],[0.01791154,0.0159311,-0.01851624,0.01791154,-0.0159311,-0.01851624,-0.03029537,-0.03371724,-0.03369285,-0.03029537,0.03371724,-0.03369285,-0.00122445,-0.00120412,-0.02488894,-0.00122445,0.00120412,-0.02488894,0.00067644,0.0,-0.00812768,0.0265399,0.0,0.16232374]],"R":[[0.0,0.0,-0.885186,0.0,0.0,5.152898,-0.885186,5.152898,0.0],[0.0,0.0,5.152898,0.0,0.0,0.885186,5.152898,0.885186,0.0],[-0.991805,10.750845,0.0,10.750845,0.991805,0.0,0.0,0.0,0.0],[0.0,0.0,0.885186,0.0,0.0,5.152898,0.885186,5.152898,0.0],[0.0,0.0,5.152898,0.0,0.0,-0.885186,5.152898,-0.885186,0.0],[0.991805,10.750845,0.0,10.750845,-0.991805,0.0,0.0,0.0,0.0],[0.0,0.0,1.366726,0.0,0.0,0.958459,1.366726,0.958459,0.0],[0.0,0.0,0.958459,0.0,0.0,-1.366726,0.958459,-1.366726,0.0],[0.162122,-3.605843,0.0,-3.605843,-0.162122,0.0,0.0,0.0,0.0],[0.0,0.0,-1.366726,0.0,0.0,0.958459,-1.366726,0.958459,0.0],[0.0,0.0,0.958459,0.0,0.0,1.366726,0.958459,1.366726,0.0],[-0.162122,-3.605843,0.0,-3.605843,0.162122,0.0,0.0,0.0,0.0],[-42.974239,0.0,0.0,0.0,-28.927643,-2.941352,0.0,-2.941352,-25.375265],[0.0,-15.973916,-3.170004,-15.973916,0.0,0.0,-3.170004,0.0,0.0],[0.0,-3.572501,-15.057858,-3.572501,0.0,0.0,-15.057858,0.0,0.0],[42.974239,0.0,0.0,0.0,28.927643,-2.941352,0.0,-2.941352,25.375265],[0.0,15.973916,-3.170004,15.973916,0.0,0.0,-3.170004,0.0,0.0],[0.0,-3.572501,15.057858,-3.572501,0.0,0.0,15.057858,0.0,0.0],[0.0,-15.973916,0.0,-15.973916,0.0,-3.170004,0.0,-3.170004,0.0],[-28.927643,0.0,-2.941352,0.0,-42.974239,0.0,-2.941352,0.0,-25.375265],[0.0,-3.572501,0.0,-3.572501,0.0,-15.057858,0.0,-15.057858,0.0],[0.0,15.973916,0.0,15.973916,0.0,-3.170004,0.0,-3.170004,0.0],[28.927643,0.0,-2.941352,0.0,42.974239,0.0,-2.941352,0.0,25.375265],[0.0,-3.572501,0.0,-3.572501,0.0,15.057858,0.0,15.057858,0.0]]},"ref":[[57.21,2,3.2496],[66.3,1,3.6034],[75.13,2,22.1398],[78.0,1,9.5048],[132.8,2,12.392],[151.21,1,6.4472],[165.9,1,0.0],[173.39,1,2436.1921],[173.68,2,174.8414],[174.53,1,159.9684],[190.94,1,0.0],[203.89,2,8.7278],[210.2,2,77.8922],[210.95,1,202.567],[213.79,1,37.1757]]},"CA":{"N":12,"types":[0,1,2,2],"mZ":[65.38,65.38,78.971],"mC":[63.546,114.818,78.971],"Z":{"F":[[0.1066153,0.0,0.0,0.00848028,0.0,0.0,-0.10872636,-0.0,-0.0,-0.00636922,-0.0,0.0],[0.0,0.1066153,-0.0,0.0,0.00848028,-0.0,-0.0,-0.00636922,-0.0,-0.0,-0.10872636,0.0],[0.0,-0.0,0.15856684,0.0,-0.0,-0.04347126,-0.0,-0.0,-0.05754779,0.0,0.0,-0.05754779],[0.00848028,0.0,0.0,0.1066153,0.0,0.0,-0.00636922,-0.0,0.0,-0.10872636,-0.0,-0.0],[0.0,0.00848028,-0.0,0.0,0.1066153,-0.0,-0.0,-0.10872636,0.0,-0.0,-0.00636922,-0.0],[0.0,-0.0,-0.04347126,0.0,-0.0,0.15856684,0.0,0.0,-0.05754779,-0.0,-0.0,-0.05754779],[-0.10872636,-0.0,-0.0,-0.00636922,-0.0,0.0,0.14605219,0.0,0.0,-0.03095661,0.0,0.0],[-0.0,-0.00636922,-0.0,-0.0,-0.10872636,0.0,0.0,0.14605219,-0.0,0.0,-0.03095661,-0.0],[-0.0,-0.0,-0.05754779,0.0,0.0,-0.05754779,0.0,-0.0,0.171628,0.0,-0.0,-0.05653242],[-0.00636922,-0.0,0.0,-0.10872636,-0.0,-0.0,-0.03095661,0.0,0.0,0.14605219,0.0,0.0],[-0.0,-0.10872636,0.0,-0.0,-0.00636922,-0.0,0.0,-0.03095661,-0.0,0.0,0.14605219,-0.0],[0.0,0.0,-0.05754779,-0.0,-0.0,-0.05754779,0.0,-0.0,-0.05653242,0.0,-0.0,0.171628]],"R":[[0.0,0.0,0.849995,0.0,0.0,0.0,0.849995,0.0,0.0],[0.0,0.0,0.0,0.0,0.0,-0.849995,0.0,-0.849995,0.0],[0.829836,0.0,0.0,0.0,-0.829836,0.0,0.0,0.0,0.0],[0.0,0.0,0.849995,0.0,0.0,0.0,0.849995,0.0,0.0],[0.0,0.0,0.0,0.0,0.0,-0.849995,0.0,-0.849995,0.0],[0.829836,0.0,0.0,0.0,-0.829836,0.0,0.0,0.0,0.0],[0.0,0.0,-0.850063,0.0,0.0,0.0,-0.850063,0.0,0.0],[0.0,0.0,0.0,0.0,0.0,0.850063,0.0,0.850063,0.0],[-0.83002,0.0,0.0,0.0,0.83002,0.0,0.0,0.0,0.0],[0.0,0.0,-0.850063,0.0,0.0,0.0,-0.850063,0.0,0.0],[0.0,0.0,0.0,0.0,0.0,0.850063,0.0,0.850063,0.0],[-0.83002,0.0,0.0,0.0,0.83002,0.0,0.0,0.0,0.0]]},"C":{"F":[[0.07062885,-0.0,-0.0,0.00478318,0.0,0.0,-0.07637411,0.0,0.0,0.00096208,-0.0,0.0],[-0.0,0.07062885,0.0,-0.0,0.00478318,-0.0,0.0,0.00096208,0.0,-0.0,-0.07637411,-0.0],[-0.0,0.0,0.06723733,0.0,-0.0,-0.02719083,-0.0,0.0,-0.02002325,0.0,0.0,-0.02002325],[0.00478318,-0.0,0.0,0.12741227,0.0,-0.0,-0.00116824,-0.0,-0.0,-0.13102721,-0.0,0.0],[0.0,0.00478318,-0.0,0.0,0.12741227,0.0,0.0,-0.13102721,-0.0,-0.0,-0.00116824,0.0],[0.0,-0.0,-0.02719083,-0.0,0.0,0.24189327,-0.0,-0.0,-0.10735122,0.0,0.0,-0.10735122],[-0.07637411,0.0,-0.0,-0.00116824,0.0,-0.0,0.10595901,-0.0,0.0,-0.02841666,-0.0,-0.0],[0.0,0.00096208,0.0,-0.0,-0.13102721,-0.0,-0.0,0.15848179,-0.0,0.0,-0.02841666,0.0],[0.0,0.0,-0.02002325,-0.0,-0.0,-0.10735122,0.0,-0.0,0.16642614,-0.0,-0.0,-0.03905167],[0.00096208,-0.0,0.0,-0.13102721,-0.0,0.0,-0.02841666,0.0,-0.0,0.15848179,0.0,-0.0],[-0.0,-0.07637411,0.0,-0.0,-0.00116824,0.0,-0.0,-0.02841666,-0.0,0.0,0.10595901,-0.0],[0.0,-0.0,-0.02002325,0.0,0.0,-0.10735122,-0.0,0.0,-0.03905167,-0.0,-0.0,0.16642614]],"R":[[0.0,0.0,12.612086,0.0,0.0,0.0,12.612086,0.0,0.0],[0.0,0.0,0.0,0.0,0.0,-12.612086,0.0,-12.612086,0.0],[0.427397,0.0,0.0,0.0,-0.427397,0.0,0.0,0.0,0.0],[0.0,0.0,-6.484521,0.0,0.0,0.0,-6.484521,0.0,0.0],[0.0,0.0,0.0,0.0,0.0,6.484521,0.0,6.484521,0.0],[-4.006889,0.0,0.0,0.0,4.006889,0.0,0.0,0.0,0.0],[0.0,0.0,-22.284454,0.0,0.0,0.0,-22.284454,0.0,0.0],[0.0,0.0,0.0,0.0,0.0,-16.15689,0.0,-16.15689,0.0],[-28.776751,0.0,0.0,0.0,-32.356243,0.0,0.0,0.0,-43.308096],[0.0,0.0,16.15689,0.0,0.0,0.0,16.15689,0.0,0.0],[0.0,0.0,0.0,0.0,0.0,22.284454,0.0,22.284454,0.0],[32.356243,0.0,0.0,0.0,28.776751,0.0,0.0,0.0,43.308096]]},"ref":[[53.97,2,10.1334],[131.28,1,0.0851],[173.46,2,240.0424],[185.41,1,1410.0403],[201.47,2,273.2826],[214.22,1,4.6153]]}};
+const GEO_HS_SE = {"CH":{"LZ":[[2.84868,-2.84868,5.69735],[2.84868,2.84868,5.69735],[-2.84868,-2.84868,5.69735]],"posZ":[[0.0,0.0,0.0],[0.0,-2.84868,8.54603],[0.0,0.0,5.69735],[2.84868,0.0,8.54603],[1.42434,-1.42434,9.97037],[1.42434,-1.42434,4.27302],[-1.42434,-1.42434,7.12169],[1.42434,1.42434,7.12169]],"boxZ":[5.69735,5.69735,11.39471],"LC":[[2.91821,-2.91821,5.8635],[2.91821,2.91821,5.8635],[-2.91821,-2.91821,5.8635]],"posC":[[0.0,0.0,0.0],[0.0,-2.91821,8.79526],[0.0,0.0,5.8635],[2.91821,0.0,8.79526],[1.32211,-1.45911,10.26113],[1.5961,-1.45911,4.39763],[-1.45911,-1.5961,7.32938],[1.45911,1.5961,7.32938]],"boxC":[5.83643,5.83643,11.72701],"ty":[0,0,1,1,2,2,2,2],"o":[0,0,0]},"CA":{"LZ":[[4.02864,0.0,0.0],[0.0,4.02864,0.0],[0.0,0.0,5.69735]],"posZ":[[0.0,0.0,2.84868],[2.01432,2.01432,0.0],[2.01432,0.0,4.27302],[0.0,2.01432,1.42434]],"boxZ":[4.02864,4.02864,5.69735],"LC":[[4.1404,0.0,0.0],[0.0,4.1404,0.0],[0.0,0.0,5.82135]],"posC":[[0.0,0.0,2.91068],[2.0702,2.0702,0.0],[2.0702,0.0,4.2257],[0.0,2.0702,1.59565]],"boxC":[4.1404,4.1404,5.82135],"ty":[0,1,2,2],"o":[0,0,0]}};
+// Sulfides: ZnS_CH.dyn / CuInS2_CH.dyn and ZnS_Au.dyn / CuInS2_Au.dyn, same conventions and atom order (type 2 = S).
+const HSD_S = {"CH":{"N":24,"types":[0,0,1,1,2,2,2,2],"mZ":[65.38,65.38,32.06],"mC":[63.546,114.818,32.06],"Z":{"F":[[0.1389454,0.0,-0.0,0.0027917,0.01366952,-0.0,-0.02077676,-0.0,-0.0,0.0027917,-0.01366952,0.0,-0.03093801,0.02755984,0.02501642,-0.03093801,0.02755984,-0.02501642,-0.03093801,-0.02755984,-0.02501642,-0.03093801,-0.02755984,0.02501642],[0.0,0.1389454,0.0,-0.01366952,0.0027917,0.0,-0.0,-0.02077676,-0.0,0.01366952,0.0027917,-0.0,0.02755984,-0.03093801,-0.02501642,0.02755984,-0.03093801,0.02501642,-0.02755984,-0.03093801,-0.02501642,-0.02755984,-0.03093801,0.02501642],[-0.0,0.0,0.14465911,-0.0,-0.0,-0.02650931,-0.0,-0.0,0.03211155,-0.0,0.0,-0.02650931,0.02810935,-0.02810935,-0.03093801,-0.02810935,0.02810935,-0.03093801,-0.02810935,-0.02810935,-0.03093801,0.02810935,0.02810935,-0.03093801],[0.0027917,-0.01366952,-0.0,0.1389454,-0.0,-0.0,0.0027917,0.01366952,-0.0,-0.02077676,-0.0,-0.0,-0.03093801,-0.02755984,-0.02501642,-0.03093801,-0.02755984,0.02501642,-0.03093801,0.02755984,-0.02501642,-0.03093801,0.02755984,0.02501642],[0.01366952,0.0027917,-0.0,-0.0,0.1389454,0.0,-0.01366952,0.0027917,0.0,-0.0,-0.02077676,0.0,-0.02755984,-0.03093801,-0.02501642,-0.02755984,-0.03093801,0.02501642,0.02755984,-0.03093801,0.02501642,0.02755984,-0.03093801,-0.02501642],[-0.0,0.0,-0.02650931,-0.0,0.0,0.14465911,0.0,-0.0,-0.02650931,-0.0,0.0,0.03211155,-0.02810935,-0.02810935,-0.03093801,0.02810935,0.02810935,-0.03093801,-0.02810935,0.02810935,-0.03093801,0.02810935,-0.02810935,-0.03093801],[-0.02077676,-0.0,-0.0,0.0027917,-0.01366952,0.0,0.1389454,0.0,0.0,0.0027917,0.01366952,-0.0,-0.03093801,0.02755984,-0.02501642,-0.03093801,0.02755984,0.02501642,-0.03093801,-0.02755984,0.02501642,-0.03093801,-0.02755984,-0.02501642],[-0.0,-0.02077676,-0.0,0.01366952,0.0027917,-0.0,0.0,0.1389454,0.0,-0.01366952,0.0027917,0.0,0.02755984,-0.03093801,0.02501642,0.02755984,-0.03093801,-0.02501642,-0.02755984,-0.03093801,0.02501642,-0.02755984,-0.03093801,-0.02501642],[-0.0,-0.0,0.03211155,-0.0,0.0,-0.02650931,0.0,0.0,0.14465911,0.0,-0.0,-0.02650931,-0.02810935,0.02810935,-0.03093801,0.02810935,-0.02810935,-0.03093801,0.02810935,0.02810935,-0.03093801,-0.02810935,-0.02810935,-0.03093801],[0.0027917,0.01366952,-0.0,-0.02077676,-0.0,-0.0,0.0027917,-0.01366952,0.0,0.1389454,-0.0,0.0,-0.03093801,-0.02755984,0.02501642,-0.03093801,-0.02755984,-0.02501642,-0.03093801,0.02755984,0.02501642,-0.03093801,0.02755984,-0.02501642],[-0.01366952,0.0027917,0.0,-0.0,-0.02077676,0.0,0.01366952,0.0027917,-0.0,-0.0,0.1389454,0.0,-0.02755984,-0.03093801,0.02501642,-0.02755984,-0.03093801,-0.02501642,0.02755984,-0.03093801,-0.02501642,0.02755984,-0.03093801,0.02501642],[0.0,-0.0,-0.02650931,-0.0,0.0,0.03211155,-0.0,0.0,-0.02650931,0.0,0.0,0.14465911,0.02810935,0.02810935,-0.03093801,-0.02810935,-0.02810935,-0.03093801,0.02810935,-0.02810935,-0.03093801,-0.02810935,0.02810935,-0.03093801],[-0.03093801,0.02755984,0.02810935,-0.03093801,-0.02755984,-0.02810935,-0.03093801,0.02755984,-0.02810935,-0.03093801,-0.02755984,0.02810935,0.19879238,0.0,0.0,-0.03721994,-0.0,-0.0,-0.0189102,-0.00508586,-0.0,-0.0189102,0.00508586,-0.0],[0.02755984,-0.03093801,-0.02810935,-0.02755984,-0.03093801,-0.02810935,0.02755984,-0.03093801,0.02810935,-0.02755984,-0.03093801,0.02810935,0.0,0.19879238,0.0,-0.0,-0.03721994,-0.0,0.00508586,-0.0189102,-0.0,-0.00508586,-0.0189102,0.0],[0.02501642,-0.02501642,-0.03093801,-0.02501642,-0.02501642,-0.03093801,-0.02501642,0.02501642,-0.03093801,0.02501642,0.02501642,-0.03093801,0.0,0.0,0.20095638,-0.0,0.0,-0.00851146,-0.0,0.0,-0.03434644,-0.0,-0.0,-0.03434644],[-0.03093801,0.02755984,-0.02810935,-0.03093801,-0.02755984,0.02810935,-0.03093801,0.02755984,0.02810935,-0.03093801,-0.02755984,-0.02810935,-0.03721994,-0.0,-0.0,0.19879238,-0.0,0.0,-0.0189102,0.00508586,-0.0,-0.0189102,-0.00508586,-0.0],[0.02755984,-0.03093801,0.02810935,-0.02755984,-0.03093801,0.02810935,0.02755984,-0.03093801,-0.02810935,-0.02755984,-0.03093801,-0.02810935,-0.0,-0.03721994,0.0,-0.0,0.19879238,0.0,-0.00508586,-0.0189102,0.0,0.00508586,-0.0189102,-0.0],[-0.02501642,0.02501642,-0.03093801,0.02501642,0.02501642,-0.03093801,0.02501642,-0.02501642,-0.03093801,-0.02501642,-0.02501642,-0.03093801,-0.0,-0.0,-0.00851146,0.0,0.0,0.20095638,-0.0,-0.0,-0.03434644,-0.0,0.0,-0.03434644],[-0.03093801,-0.02755984,-0.02810935,-0.03093801,0.02755984,-0.02810935,-0.03093801,-0.02755984,0.02810935,-0.03093801,0.02755984,0.02810935,-0.0189102,0.00508586,-0.0,-0.0189102,-0.00508586,-0.0,0.19879238,0.0,0.0,-0.03721994,-0.0,-0.0],[-0.02755984,-0.03093801,-0.02810935,0.02755984,-0.03093801,0.02810935,-0.02755984,-0.03093801,0.02810935,0.02755984,-0.03093801,-0.02810935,-0.00508586,-0.0189102,0.0,0.00508586,-0.0189102,-0.0,0.0,0.19879238,0.0,-0.0,-0.03721994,-0.0],[-0.02501642,-0.02501642,-0.03093801,-0.02501642,0.02501642,-0.03093801,0.02501642,0.02501642,-0.03093801,0.02501642,-0.02501642,-0.03093801,-0.0,-0.0,-0.03434644,-0.0,0.0,-0.03434644,0.0,0.0,0.20095638,0.0,0.0,-0.00851146],[-0.03093801,-0.02755984,0.02810935,-0.03093801,0.02755984,0.02810935,-0.03093801,-0.02755984,-0.02810935,-0.03093801,0.02755984,-0.02810935,-0.0189102,-0.00508586,-0.0,-0.0189102,0.00508586,-0.0,-0.03721994,-0.0,0.0,0.19879238,0.0,0.0],[-0.02755984,-0.03093801,0.02810935,0.02755984,-0.03093801,-0.02810935,-0.02755984,-0.03093801,-0.02810935,0.02755984,-0.03093801,0.02810935,0.00508586,-0.0189102,-0.0,-0.00508586,-0.0189102,0.0,-0.0,-0.03721994,0.0,0.0,0.19879238,-0.0],[0.02501642,0.02501642,-0.03093801,0.02501642,-0.02501642,-0.03093801,-0.02501642,-0.02501642,-0.03093801,-0.02501642,0.02501642,-0.03093801,-0.0,0.0,-0.03434644,-0.0,-0.0,-0.03434644,-0.0,-0.0,-0.00851146,0.0,-0.0,0.20095638]],"R":[[0.0,0.0,0.0,0.0,0.0,0.882289,0.0,0.882289,0.0],[0.0,0.0,0.882289,0.0,0.0,0.0,0.882289,0.0,0.0],[0.0,0.881696,0.0,0.881696,0.0,0.0,0.0,0.0,0.0],[0.0,0.0,0.0,0.0,0.0,0.882289,0.0,0.882289,0.0],[0.0,0.0,0.882289,0.0,0.0,0.0,0.882289,0.0,0.0],[0.0,0.881696,0.0,0.881696,0.0,0.0,0.0,0.0,0.0],[0.0,0.0,0.0,0.0,0.0,0.882289,0.0,0.882289,0.0],[0.0,0.0,0.882289,0.0,0.0,0.0,0.882289,0.0,0.0],[0.0,0.881696,0.0,0.881696,0.0,0.0,0.0,0.0,0.0],[0.0,0.0,0.0,0.0,0.0,0.882289,0.0,0.882289,0.0],[0.0,0.0,0.882289,0.0,0.0,0.0,0.882289,0.0,0.0],[0.0,0.881696,0.0,0.881696,0.0,0.0,0.0,0.0,0.0],[0.0,0.0,0.0,0.0,0.0,-0.882024,0.0,-0.882024,0.0],[0.0,0.0,-0.882024,0.0,0.0,0.0,-0.882024,0.0,0.0],[0.0,-0.881444,0.0,-0.881444,0.0,0.0,0.0,0.0,0.0],[0.0,0.0,0.0,0.0,0.0,-0.882024,0.0,-0.882024,0.0],[0.0,0.0,-0.882024,0.0,0.0,0.0,-0.882024,0.0,0.0],[0.0,-0.881444,0.0,-0.881444,0.0,0.0,0.0,0.0,0.0],[0.0,0.0,0.0,0.0,0.0,-0.882024,0.0,-0.882024,0.0],[0.0,0.0,-0.882024,0.0,0.0,0.0,-0.882024,0.0,0.0],[0.0,-0.881444,0.0,-0.881444,0.0,0.0,0.0,0.0,0.0],[0.0,0.0,0.0,0.0,0.0,-0.882024,0.0,-0.882024,0.0],[0.0,0.0,-0.882024,0.0,0.0,0.0,-0.882024,0.0,0.0],[0.0,-0.881444,0.0,-0.881444,0.0,0.0,0.0,0.0,0.0]]},"C":{"F":[[0.06418269,0.0,0.0,0.00055493,0.00342858,-0.0,-0.01235943,0.00059423,0.0,0.00095059,-0.00945153,-0.0,-0.00923332,0.01567305,0.01518049,-0.00923332,0.01567305,-0.01518049,-0.01743107,-0.01295855,-0.01636747,-0.01743107,-0.01295855,0.01636747],[0.0,0.06418269,0.0,-0.00342858,0.00055493,-0.0,-0.00059423,-0.01235943,-0.0,0.00945153,0.00095059,-0.0,0.01295855,-0.01743107,-0.01636747,0.01295855,-0.01743107,0.01636747,-0.01567305,-0.00923332,-0.01518049,-0.01567305,-0.00923332,0.01518049],[0.0,0.0,0.07202566,0.0,-0.0,-0.00544557,-0.0,0.0,0.01671197,-0.0,-0.0,-0.0145041,0.01361051,-0.01768726,-0.01719699,-0.01361051,0.01768726,-0.01719699,-0.01768726,-0.01361051,-0.01719699,0.01768726,0.01361051,-0.01719699],[0.00055493,-0.00342858,0.0,0.06418269,0.0,-0.0,0.00095059,0.00945153,0.0,-0.01235943,-0.00059423,-0.0,-0.00923332,-0.01567305,-0.01518049,-0.00923332,-0.01567305,0.01518049,-0.01743107,0.01295855,-0.01636747,-0.01743107,0.01295855,0.01636747],[0.00342858,0.00055493,-0.0,0.0,0.06418269,0.0,-0.00945153,0.00095059,-0.0,0.00059423,-0.01235943,0.0,-0.01295855,-0.01743107,-0.01636747,-0.01295855,-0.01743107,0.01636747,0.01567305,-0.00923332,0.01518049,0.01567305,-0.00923332,-0.01518049],[-0.0,-0.0,-0.00544557,-0.0,0.0,0.07202566,0.0,-0.0,-0.0145041,-0.0,0.0,0.01671197,-0.01361051,-0.01768726,-0.01719699,0.01361051,0.01768726,-0.01719699,-0.01768726,0.01361051,-0.01719699,0.01768726,-0.01361051,-0.01719699],[-0.01235943,-0.00059423,-0.0,0.00095059,-0.00945153,0.0,0.19968785,0.0,-0.0,0.00098487,0.02183363,-0.0,-0.05652591,0.04025639,-0.03854364,-0.05652591,0.04025639,0.03854364,-0.03810603,-0.04615118,0.03526968,-0.03810603,-0.04615118,-0.03526968],[0.00059423,-0.01235943,0.0,0.00945153,0.00095059,-0.0,0.0,0.19968785,0.0,-0.02183363,0.00098487,-0.0,0.04615118,-0.03810603,0.03526968,0.04615118,-0.03810603,-0.03526968,-0.04025639,-0.05652591,0.03854364,-0.04025639,-0.05652591,-0.03854364],[0.0,-0.0,0.01671197,0.0,-0.0,-0.0145041,-0.0,0.0,0.19969587,-0.0,-0.0,-0.04997998,-0.04530233,0.03850847,-0.03798094,0.04530233,-0.03850847,-0.03798094,0.03850847,0.04530233,-0.03798094,-0.03850847,-0.04530233,-0.03798094],[0.00095059,0.00945153,-0.0,-0.01235943,0.00059423,-0.0,0.00098487,-0.02183363,-0.0,0.19968785,0.0,0.0,-0.05652591,-0.04025639,0.03854364,-0.05652591,-0.04025639,-0.03854364,-0.03810603,0.04615118,0.03526968,-0.03810603,0.04615118,-0.03526968],[-0.00945153,0.00095059,-0.0,-0.00059423,-0.01235943,0.0,0.02183363,0.00098487,-0.0,0.0,0.19968785,0.0,-0.04615118,-0.03810603,0.03526968,-0.04615118,-0.03810603,-0.03526968,0.04025639,-0.05652591,-0.03854364,0.04025639,-0.05652591,0.03854364],[-0.0,-0.0,-0.0145041,-0.0,0.0,0.01671197,-0.0,-0.0,-0.04997998,0.0,0.0,0.19969587,0.04530233,0.03850847,-0.03798094,-0.04530233,-0.03850847,-0.03798094,0.03850847,-0.04530233,-0.03798094,-0.03850847,0.04530233,-0.03798094],[-0.00923332,0.01295855,0.01361051,-0.00923332,-0.01295855,-0.01361051,-0.05652591,0.04615118,-0.04530233,-0.05652591,-0.04615118,0.04530233,0.19035969,-0.0,0.0,-0.02632095,-0.0,-0.0,-0.01626014,-0.00513433,0.00141362,-0.01626014,0.00513433,-0.00141362],[0.01567305,-0.01743107,-0.01768726,-0.01567305,-0.01743107,-0.01768726,0.04025639,-0.03810603,0.03850847,-0.04025639,-0.03810603,0.03850847,-0.0,0.17638487,-0.04085105,-0.0,-0.03279039,-0.00021977,0.00252921,-0.01626014,-0.00028599,-0.00252921,-0.01626014,-0.00028599],[0.01518049,-0.01636747,-0.01719699,-0.01518049,-0.01636747,-0.01719699,-0.03854364,0.03526968,-0.03798094,0.03854364,0.03526968,-0.03798094,0.0,-0.04085105,0.18038555,-0.0,0.00021977,-0.00914927,-0.00028599,0.00141362,-0.03044021,0.00028599,0.00141362,-0.03044021],[-0.00923332,0.01295855,-0.01361051,-0.00923332,-0.01295855,0.01361051,-0.05652591,0.04615118,0.04530233,-0.05652591,-0.04615118,-0.04530233,-0.02632095,-0.0,-0.0,0.19035969,-0.0,0.0,-0.01626014,0.00513433,0.00141362,-0.01626014,-0.00513433,-0.00141362],[0.01567305,-0.01743107,0.01768726,-0.01567305,-0.01743107,0.01768726,0.04025639,-0.03810603,-0.03850847,-0.04025639,-0.03810603,-0.03850847,-0.0,-0.03279039,0.00021977,-0.0,0.17638487,0.04085105,-0.00252921,-0.01626014,0.00028599,0.00252921,-0.01626014,0.00028599],[-0.01518049,0.01636747,-0.01719699,0.01518049,0.01636747,-0.01719699,0.03854364,-0.03526968,-0.03798094,-0.03854364,-0.03526968,-0.03798094,-0.0,-0.00021977,-0.00914927,0.0,0.04085105,0.18038555,-0.00028599,-0.00141362,-0.03044021,0.00028599,-0.00141362,-0.03044021],[-0.01743107,-0.01567305,-0.01768726,-0.01743107,0.01567305,-0.01768726,-0.03810603,-0.04025639,0.03850847,-0.03810603,0.04025639,0.03850847,-0.01626014,0.00252921,-0.00028599,-0.01626014,-0.00252921,-0.00028599,0.17638487,0.0,-0.04085105,-0.03279039,0.0,-0.00021977],[-0.01295855,-0.00923332,-0.01361051,0.01295855,-0.00923332,0.01361051,-0.04615118,-0.05652591,0.04530233,0.04615118,-0.05652591,-0.04530233,-0.00513433,-0.01626014,0.00141362,0.00513433,-0.01626014,-0.00141362,0.0,0.19035969,0.0,-0.0,-0.02632095,-0.0],[-0.01636747,-0.01518049,-0.01719699,-0.01636747,0.01518049,-0.01719699,0.03526968,0.03854364,-0.03798094,0.03526968,-0.03854364,-0.03798094,0.00141362,-0.00028599,-0.03044021,0.00141362,0.00028599,-0.03044021,-0.04085105,0.0,0.18038555,0.00021977,-0.0,-0.00914927],[-0.01743107,-0.01567305,0.01768726,-0.01743107,0.01567305,0.01768726,-0.03810603,-0.04025639,-0.03850847,-0.03810603,0.04025639,-0.03850847,-0.01626014,-0.00252921,0.00028599,-0.01626014,0.00252921,0.00028599,-0.03279039,-0.0,0.00021977,0.17638487,-0.0,0.04085105],[-0.01295855,-0.00923332,0.01361051,0.01295855,-0.00923332,-0.01361051,-0.04615118,-0.05652591,-0.04530233,0.04615118,-0.05652591,0.04530233,0.00513433,-0.01626014,0.00141362,-0.00513433,-0.01626014,-0.00141362,0.0,-0.02632095,-0.0,-0.0,0.19035969,-0.0],[0.01636747,0.01518049,-0.01719699,0.01636747,-0.01518049,-0.01719699,-0.03526968,-0.03854364,-0.03798094,-0.03526968,0.03854364,-0.03798094,-0.00141362,-0.00028599,-0.03044021,-0.00141362,0.00028599,-0.03044021,-0.00021977,-0.0,-0.00914927,0.04085105,-0.0,0.18038555]],"R":[[0.0,0.0,-0.060526,0.0,0.0,4.635493,-0.060526,4.635493,0.0],[0.0,0.0,4.635493,0.0,0.0,0.060526,4.635493,0.060526,0.0],[-0.072184,7.212416,0.0,7.212416,0.072184,0.0,0.0,0.0,0.0],[0.0,0.0,0.060526,0.0,0.0,4.635493,0.060526,4.635493,0.0],[0.0,0.0,4.635493,0.0,0.0,-0.060526,4.635493,-0.060526,0.0],[0.072184,7.212416,0.0,7.212416,-0.072184,0.0,0.0,0.0,0.0],[0.0,0.0,-0.44842,0.0,0.0,1.440969,-0.44842,1.440969,0.0],[0.0,0.0,1.440969,0.0,0.0,0.44842,1.440969,0.44842,0.0],[-0.491537,0.085935,0.0,0.085935,0.491537,0.0,0.0,0.0,0.0],[0.0,0.0,0.44842,0.0,0.0,1.440969,0.44842,1.440969,0.0],[0.0,0.0,1.440969,0.0,0.0,-0.44842,1.440969,-0.44842,0.0],[0.491537,0.085935,0.0,0.085935,-0.491537,0.0,0.0,0.0,0.0],[-22.73993,0.0,0.0,0.0,-15.286446,-2.40744,0.0,-2.40744,-13.815274],[0.0,-9.540384,-3.669021,-9.540384,0.0,0.0,-3.669021,0.0,0.0],[0.0,-3.649175,-8.358695,-3.649175,0.0,0.0,-8.358695,0.0,0.0],[22.73993,0.0,0.0,0.0,15.286446,-2.40744,0.0,-2.40744,13.815274],[0.0,9.540384,-3.669021,9.540384,0.0,0.0,-3.669021,0.0,0.0],[0.0,-3.649175,8.358695,-3.649175,0.0,0.0,8.358695,0.0,0.0],[0.0,-9.540384,0.0,-9.540384,0.0,-3.669021,0.0,-3.669021,0.0],[-15.286446,0.0,-2.40744,0.0,-22.73993,0.0,-2.40744,0.0,-13.815274],[0.0,-3.649175,0.0,-3.649175,0.0,-8.358695,0.0,-8.358695,0.0],[0.0,9.540384,0.0,9.540384,0.0,-3.669021,0.0,-3.669021,0.0],[15.286446,0.0,-2.40744,0.0,22.73993,0.0,-2.40744,0.0,13.815274],[0.0,-3.649175,0.0,-3.649175,0.0,8.358695,0.0,8.358695,0.0]]},"ref":[[71.16,2,0.8962],[79.45,1,0.7501],[90.3,2,3.0682],[90.76,1,3.494],[137.05,2,15.9574],[159.19,1,2.1561],[230.01,1,167.4859],[237.76,2,185.753],[268.76,1,0.0],[291.66,1,1700.1761],[292.68,2,5.9126],[321.47,2,52.004],[323.71,1,30.8311],[325.0,1,139.5159],[327.94,1,0.0]]},"CA":{"N":12,"types":[0,1,2,2],"mZ":[65.38,65.38,32.06],"mC":[63.546,114.818,32.06],"Z":{"F":[[0.1178346,0.0,0.0,0.00575911,0.0,0.0,-0.11675595,-0.0,-0.0,-0.00683776,-0.0,0.0],[0.0,0.1178346,-0.0,0.0,0.00575911,-0.0,-0.0,-0.00683776,-0.0,-0.0,-0.11675595,0.0],[0.0,-0.0,0.17655153,0.0,-0.0,-0.05295781,-0.0,-0.0,-0.06179686,0.0,0.0,-0.06179686],[0.00575911,0.0,0.0,0.1178346,0.0,0.0,-0.00683776,-0.0,0.0,-0.11675595,-0.0,-0.0],[0.0,0.00575911,-0.0,0.0,0.1178346,-0.0,-0.0,-0.11675595,0.0,-0.0,-0.00683776,-0.0],[0.0,-0.0,-0.05295781,0.0,-0.0,0.17655153,0.0,0.0,-0.06179686,-0.0,-0.0,-0.06179686],[-0.11675595,-0.0,-0.0,-0.00683776,-0.0,0.0,0.16125861,0.0,0.0,-0.0376649,0.0,0.0],[-0.0,-0.00683776,-0.0,-0.0,-0.11675595,0.0,0.0,0.16125861,-0.0,0.0,-0.0376649,-0.0],[-0.0,-0.0,-0.06179686,0.0,0.0,-0.06179686,0.0,-0.0,0.19225002,0.0,-0.0,-0.0686563],[-0.00683776,-0.0,0.0,-0.11675595,-0.0,-0.0,-0.0376649,0.0,0.0,0.16125861,0.0,0.0],[-0.0,-0.11675595,0.0,-0.0,-0.00683776,-0.0,0.0,-0.0376649,-0.0,0.0,0.16125861,-0.0],[0.0,0.0,-0.06179686,-0.0,-0.0,-0.06179686,0.0,-0.0,-0.0686563,0.0,-0.0,0.19225002]],"R":[[0.0,0.0,0.886529,0.0,0.0,0.0,0.886529,0.0,0.0],[0.0,0.0,0.0,0.0,0.0,-0.886529,0.0,-0.886529,0.0],[0.870302,0.0,0.0,0.0,-0.870302,0.0,0.0,0.0,0.0],[0.0,0.0,0.886529,0.0,0.0,0.0,0.886529,0.0,0.0],[0.0,0.0,0.0,0.0,0.0,-0.886529,0.0,-0.886529,0.0],[0.870302,0.0,0.0,0.0,-0.870302,0.0,0.0,0.0,0.0],[0.0,0.0,-0.886377,0.0,0.0,0.0,-0.886377,0.0,0.0],[0.0,0.0,0.0,0.0,0.0,0.886377,0.0,0.886377,0.0],[-0.870302,0.0,0.0,0.0,0.870302,0.0,0.0,0.0,0.0],[0.0,0.0,-0.886377,0.0,0.0,0.0,-0.886377,0.0,0.0],[0.0,0.0,0.0,0.0,0.0,0.886377,0.0,0.886377,0.0],[-0.870302,0.0,0.0,0.0,0.870302,0.0,0.0,0.0,0.0]]},"C":{"F":[[0.06678093,0.0,-0.0,0.00242546,-0.0,-0.0,-0.07014823,0.0,0.0,0.00094184,-0.0,-0.0],[0.0,0.06678093,0.0,-0.0,0.00242546,-0.0,0.0,0.00094184,-0.0,0.0,-0.07014823,0.0],[-0.0,0.0,0.06546567,-0.0,-0.0,-0.03038937,0.0,-0.0,-0.01753815,0.0,0.0,-0.01753815],[0.00242546,-0.0,-0.0,0.14726794,0.0,0.0,0.00141982,0.0,-0.0,-0.15111322,-0.0,0.0],[-0.0,0.00242546,-0.0,0.0,0.14726794,0.0,0.0,-0.15111322,0.0,-0.0,0.00141982,-0.0],[-0.0,-0.0,-0.03038937,0.0,0.0,0.27021693,-0.0,-0.0,-0.11991378,0.0,0.0,-0.11991378],[-0.07014823,0.0,0.0,0.00141982,0.0,-0.0,0.1039775,-0.0,-0.0,-0.03524909,-0.0,-0.0],[0.0,0.00094184,-0.0,0.0,-0.15111322,-0.0,-0.0,0.18542047,0.0,0.0,-0.03524909,-0.0],[0.0,-0.0,-0.01753815,-0.0,0.0,-0.11991378,-0.0,0.0,0.18521802,-0.0,-0.0,-0.04776609],[0.00094184,0.0,0.0,-0.15111322,-0.0,0.0,-0.03524909,0.0,-0.0,0.18542047,0.0,-0.0],[-0.0,-0.07014823,0.0,-0.0,0.00141982,0.0,-0.0,-0.03524909,-0.0,0.0,0.1039775,-0.0],[-0.0,0.0,-0.01753815,0.0,-0.0,-0.11991378,-0.0,-0.0,-0.04776609,-0.0,-0.0,0.18521802]],"R":[[0.0,0.0,7.510856,0.0,0.0,0.0,7.510856,0.0,0.0],[0.0,0.0,0.0,0.0,0.0,-7.510856,0.0,-7.510856,0.0],[2.338313,0.0,0.0,0.0,-2.338313,0.0,0.0,0.0,0.0],[0.0,0.0,-0.14272,0.0,0.0,0.0,-0.14272,0.0,0.0],[0.0,0.0,0.0,0.0,0.0,0.14272,0.0,0.14272,0.0],[-2.15041,0.0,0.0,0.0,2.15041,0.0,0.0,0.0,0.0],[0.0,0.0,-13.058984,0.0,0.0,0.0,-13.058984,0.0,0.0],[0.0,0.0,0.0,0.0,0.0,-5.690848,0.0,-5.690848,0.0],[-14.996534,0.0,0.0,0.0,-14.80863,0.0,0.0,0.0,-23.863025],[0.0,0.0,5.690848,0.0,0.0,0.0,5.690848,0.0,0.0],[0.0,0.0,0.0,0.0,0.0,13.058984,0.0,13.058984,0.0],[14.80863,0.0,0.0,0.0,14.996534,0.0,0.0,0.0,23.863025]]},"ref":[[67.89,2,2.4724],[135.12,1,2.5204],[224.9,2,193.4852],[288.26,1,0.1438],[308.07,2,107.173],[309.86,1,933.4622]]}};
+const GEO_HS_S = {"CH":{"LZ":[[2.70952,-2.70952,5.41903],[2.70952,2.70952,5.41903],[-2.70952,-2.70952,5.41903]],"posZ":[[0.0,0.0,0.0],[0.0,-2.70952,8.12855],[0.0,0.0,5.41903],[2.70952,0.0,8.12855],[1.35476,-1.35476,9.48331],[1.35476,-1.35476,4.06427],[-1.35476,-1.35476,6.77379],[1.35476,1.35476,6.77379]],"boxZ":[5.41903,5.41903,10.83806],"LC":[[2.77758,-2.77758,5.59884],[2.77758,2.77758,5.59884],[-2.77758,-2.77758,5.59884]],"posC":[[0.0,0.0,0.0],[0.0,-2.77758,8.39826],[0.0,0.0,5.59884],[2.77758,0.0,8.39826],[1.27085,-1.38879,9.79797],[1.50673,-1.38879,4.19913],[-1.38879,-1.50673,6.99855],[1.38879,1.50673,6.99855]],"boxC":[5.55515,5.55515,11.19768],"ty":[0,0,1,1,2,2,2,2],"o":[0,0,0]},"CA":{"LZ":[[3.83183,0.0,0.0],[0.0,3.83183,0.0],[0.0,0.0,5.41903]],"posZ":[[0.0,0.0,2.70952],[1.91592,1.91592,0.0],[1.91592,0.0,4.06427],[0.0,1.91592,1.35476]],"boxZ":[3.83183,3.83183,5.41903],"LC":[[3.95285,0.0,0.0],[0.0,3.95285,0.0],[0.0,0.0,5.52543]],"posC":[[0.0,0.0,2.76272],[1.97642,1.97642,0.0],[1.97642,0.0,4.02374],[0.0,1.97642,1.5017]],"boxC":[3.95285,3.95285,5.52543],"ty":[0,1,2,2],"o":[0,0,0]}};
+var HS_MAT = 'Se', HSD = HSD_SE, GEO_HS = GEO_HS_SE;
+function setHSMaterial(x) { HS_MAT = x; HSD = x === 'S' ? HSD_S : HSD_SE; GEO_HS = x === 'S' ? GEO_HS_S : GEO_HS_SE; }
+function evaluateHS(kind, ctrl) {
+  const D0 = HSD[kind], n = D0.N, N = n / 3, ty = D0.types;
+  const mm = [0, 1, 2].map(k => lerp(D0.mZ[k], D0.mC[k], ctrl.mass));
+  const m = []; for (let a = 0; a < N; a++) for (let g = 0; g < 3; g++) m.push(mm[ty[a]]);
+  const D = new Float64Array(n * n);
+  for (let a = 0; a < n; a++) for (let b = 0; b < n; b++) D[a * n + b] = lerp(D0.Z.F[a][b], D0.C.F[a][b], ctrl.dmat) / Math.sqrt(m[a] * m[b]) / AI_AMU * AI_RY * AI_RY / 1e4;
+  const { ev, V } = jacobi(D, n);
+  const rw = ctrl.rw || [ctrl.tens, ctrl.tens, ctrl.tens];          // per species [Cu, In, Se]
+  const R = []; for (let r = 0; r < n; r++) { const w = rw[ty[Math.floor(r / 3)]]; R.push(D0.Z.R[r].map((v, k) => lerp(v, D0.C.R[r][k], w))); }
+  if (ctrl.asrR) for (let g = 0; g < 3; g++) for (let k = 0; k < 9; k++) { let mean = 0; for (let a = 0; a < N; a++) mean += R[3 * a + g][k]; mean /= N; for (let a = 0; a < N; a++) R[3 * a + g][k] -= mean; }
+  const Svec = [];
+  for (const sub of [t => t !== 2, t => t === 2]) for (let g = 0; g < 3; g++) {
+    const v = new Float64Array(n); let nn = 0;
+    for (let k = 0; k < N; k++) if (sub(ty[k])) { v[3 * k + g] = Math.sqrt(m[3 * k]); nn += m[3 * k]; }
+    for (let a = 0; a < n; a++) v[a] /= Math.sqrt(nn);
+    Svec.push(v);
+  }
+  const modes = [];
+  for (let q = 3; q < n; q++) {
+    const f = 100 * Math.sqrt(Math.max(ev[q], 0));
+    const A = new Float64Array(9), As = [new Float64Array(9), new Float64Array(9), new Float64Array(9)], p = [0, 0, 0], vec = new Float64Array(n);
+    for (let c = 0; c < n; c++) {
+      const t = ty[Math.floor(c / 3)], u = V[c * n + q] / (Math.sqrt(m[c]) * AI_AMU); vec[c] = u; p[t] += V[c * n + q] ** 2;
+      for (let k = 0; k < 9; k++) { const x = u * R[c][k]; A[k] += x; As[t][k] += x; }
+    }
+    const bose = (!ctrl.nobose && f > 1) ? AI_TCM / ((1 - Math.exp(-f / AI_TCM)) * f) : 1;
+    const I = AI_K * ramanB(A, A) * bose, Is = As.map(x => AI_K * ramanB(x, A) * bose);
+    let w = 0;
+    for (const sv of Svec) { let dot = 0; for (let c = 0; c < n; c++) dot += sv[c] * V[c * n + q]; w += dot * dot; }
+    modes.push({ ev: f, I, w, p, Is, vec });
+  }
+  return groupModes(modes);
+}
+function rNormsHS(kind, tens) {   // mean |dchi/du| per atom of each species [Cu, In, Se]
+  const D0 = HSD[kind], N = D0.N / 3, acc = [0, 0, 0], cnt = [0, 0, 0];
+  for (let a = 0; a < N; a++) { let s2 = 0; for (let g = 0; g < 3; g++) for (let k = 0; k < 9; k++) { const v = lerp(D0.Z.R[3 * a + g][k], D0.C.R[3 * a + g][k], tens); s2 += v * v; } acc[D0.types[a]] += Math.sqrt(s2); cnt[D0.types[a]]++; }
+  return acc.map((v, i) => v / cnt[i]);
+}
+
+
+// ---- Dispersion: Bloch-phase Keating dynamical matrix, ZB / CA / CH, effective (unfolded) bands on the ZB wavevector ----
+function eigSym(Ain, n) {            // symmetric eigenproblem (Householder + QL); V[i*n+j] = component i of vector j, ascending
+  const V = [], d = new Float64Array(n), e = new Float64Array(n);
+  for (let i = 0; i < n; i++) V.push(Float64Array.from(Ain.subarray ? Ain.subarray(i * n, i * n + n) : Ain.slice(i * n, i * n + n)));
+  for (let j = 0; j < n; j++) d[j] = V[n - 1][j];
+  for (let i = n - 1; i > 0; i--) {
+    let scale = 0, h = 0;
+    for (let k = 0; k < i; k++) scale += Math.abs(d[k]);
+    if (scale === 0) { e[i] = d[i - 1]; for (let j = 0; j < i; j++) { d[j] = V[i - 1][j]; V[i][j] = 0; V[j][i] = 0; } }
+    else {
+      for (let k = 0; k < i; k++) { d[k] /= scale; h += d[k] * d[k]; }
+      let f = d[i - 1], g = Math.sqrt(h); if (f > 0) g = -g;
+      e[i] = scale * g; h -= f * g; d[i - 1] = f - g;
+      for (let j = 0; j < i; j++) e[j] = 0;
+      for (let j = 0; j < i; j++) {
+        f = d[j]; V[j][i] = f; g = e[j] + V[j][j] * f;
+        for (let k = j + 1; k <= i - 1; k++) { g += V[k][j] * d[k]; e[k] += V[k][j] * f; }
+        e[j] = g;
+      }
+      f = 0;
+      for (let j = 0; j < i; j++) { e[j] /= h; f += e[j] * d[j]; }
+      const hh = f / (h + h);
+      for (let j = 0; j < i; j++) e[j] -= hh * d[j];
+      for (let j = 0; j < i; j++) {
+        f = d[j]; g = e[j];
+        for (let k = j; k <= i - 1; k++) V[k][j] -= (f * e[k] + g * d[k]);
+        d[j] = V[i - 1][j]; V[i][j] = 0;
+      }
+    }
+    d[i] = h;
+  }
+  for (let i = 0; i < n - 1; i++) {
+    V[n - 1][i] = V[i][i]; V[i][i] = 1; const h = d[i + 1];
+    if (h !== 0) {
+      for (let k = 0; k <= i; k++) d[k] = V[k][i + 1] / h;
+      for (let j = 0; j <= i; j++) {
+        let g = 0; for (let k = 0; k <= i; k++) g += V[k][i + 1] * V[k][j];
+        for (let k = 0; k <= i; k++) V[k][j] -= g * d[k];
+      }
+    }
+    for (let k = 0; k <= i; k++) V[k][i + 1] = 0;
+  }
+  for (let j = 0; j < n; j++) { d[j] = V[n - 1][j]; V[n - 1][j] = 0; }
+  V[n - 1][n - 1] = 1; e[0] = 0;
+  for (let i = 1; i < n; i++) e[i - 1] = e[i];
+  e[n - 1] = 0;
+  let f = 0, tst1 = 0; const eps = Math.pow(2, -52);
+  for (let l = 0; l < n; l++) {
+    tst1 = Math.max(tst1, Math.abs(d[l]) + Math.abs(e[l]));
+    let m = l; while (m < n) { if (Math.abs(e[m]) <= eps * tst1) break; m++; }
+    if (m > l) {
+      let it = 0;
+      do {
+        it++;
+        let g = d[l], p = (d[l + 1] - g) / (2 * e[l]), r = Math.hypot(p, 1); if (p < 0) r = -r;
+        d[l] = e[l] / (p + r); d[l + 1] = e[l] * (p + r);
+        const dl1 = d[l + 1]; let h = g - d[l];
+        for (let i = l + 2; i < n; i++) d[i] -= h;
+        f += h;
+        p = d[m]; let c = 1, c2 = c, c3 = c; const el1 = e[l + 1]; let s = 0, s2 = 0;
+        for (let i = m - 1; i >= l; i--) {
+          c3 = c2; c2 = c; s2 = s;
+          g = c * e[i]; h = c * p; r = Math.hypot(p, e[i]);
+          e[i + 1] = s * r; s = e[i] / r; c = p / r; p = c * d[i] - s * g;
+          d[i + 1] = h + s * (c * g + s * d[i]);
+          for (let k = 0; k < n; k++) { h = V[k][i + 1]; V[k][i + 1] = s * V[k][i] + c * h; V[k][i] = c * V[k][i] - s * h; }
+        }
+        p = -s * s2 * c3 * el1 * e[l] / dl1; e[l] = s * p; d[l] = c * p;
+      } while (Math.abs(e[l]) > eps * tst1 && it < 60);
+    }
+    d[l] += f; e[l] = 0;
+  }
+  const idx = Array.from({ length: n }, (_, i) => i).sort((a, b) => d[a] - d[b]);
+  const ev = idx.map(i => d[i]), Vs = new Float64Array(n * n);
+  idx.forEach((o, nw) => { for (let k = 0; k < n; k++) Vs[k * n + nw] = V[k][o]; });
+  return { ev, V: Vs };
+}
+
+function buildZB(g) {                // 2-atom fcc primitive cell, cubic axes
+  const a = lerp(5.667, 5.782, g), h = a / 2;
+  return { A: [[0, h, h], [h, 0, h], [h, h, 0]], types: ['c1', 'se'], pos: [[0, 0, 0], [a / 4, a / 4, a / 4]], a };
+}
+const DCACHE = {};
+function dispStruct(kind, g) {       // structure, bonds with their lattice translations T, and the cell-translation count
+  const key = kind;
+  const build = kind === 'ZB' ? buildZB : kind === 'CH' ? buildCH : buildCA;
+  if (!DCACHE[key]) DCACHE[key] = { topo: findBonds(build(0), 2.6) };
+  const S = build(g), bonds = bondVectors(S, DCACHE[key].topo);
+  const T = bonds.map(([i, j, v]) => [0, 1, 2].map(k => v[k] - (S.pos[j][k] - S.pos[i][k])));
+  return { S, bonds, T };
+}
+// Hermitian Keating Hessian at wavevector q (cartesian, 1/Angstrom), returned as the real 2n x 2n embedding [[A,-B],[B,A]]
+function hessQ(types, bonds, T, al, be, q) {
+  const N = types.length, n = 3 * N, n2 = 2 * n, M = new Float64Array(n2 * n2);
+  const nb = Array.from({ length: N }, () => []);
+  const term = (idx, wr, wi, coef) => {              // idx: array of indices, wr/wi: values; H_ab += coef conj(w_a) w_b
+    for (let p = 0; p < idx.length; p++) for (let r = 0; r < idx.length; r++) {
+      const a = idx[p], b = idx[r];
+      const re = coef * (wr[p] * wr[r] + wi[p] * wi[r]), im = coef * (wr[p] * wi[r] - wi[p] * wr[r]);
+      M[a * n2 + b] += re; M[(a + n) * n2 + (b + n)] += re;
+      M[a * n2 + (b + n)] -= im; M[(a + n) * n2 + b] += im;
+    }
+  };
+  const ph = (t) => { const x = q[0] * t[0] + q[1] * t[1] + q[2] * t[2]; return [Math.cos(x), Math.sin(x)]; };
+  bonds.forEach(([i, j, v], bi) => {
+    const t = T[bi];
+    nb[i].push([j, v, t]); nb[j].push([i, v.map(x => -x), t.map(x => -x)]);
+    const d2 = v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
+    const [c, s] = ph(t); const idx = [], wr = [], wi = [];
+    for (let k = 0; k < 3; k++) { idx.push(3 * j + k); wr.push(2 * v[k] * c); wi.push(2 * v[k] * s); }
+    for (let k = 0; k < 3; k++) { idx.push(3 * i + k); wr.push(-2 * v[k]); wi.push(0); }
+    term(idx, wr, wi, 2 * (3 * al[types[i]] / (16 * d2)));
+  });
+  for (let c0 = 0; c0 < N; c0++) {
+    const list = nb[c0];
+    for (let p = 0; p < list.length; p++) for (let q2 = p + 1; q2 < list.length; q2++) {
+      const [a_, ra, ta] = list[p], [b_, rb, tb] = list[q2];
+      const b = types[c0] === 'se' ? 0.5 * (be[types[a_]] + be[types[b_]]) : be[types[c0]];
+      // displacement of a_ sits at translation ta relative to c0 (and b_ at tb); c0 at 0. Combined atoms may coincide: accumulate by index
+      const acc = new Map();
+      const add = (atom, k, re, im) => { const key = atom * 3 + k, o = acc.get(key) || [0, 0]; o[0] += re; o[1] += im; acc.set(key, o); };
+      const pa = ph(ta), pb = ph(tb);
+      for (let k = 0; k < 3; k++) {
+        add(a_, k, rb[k] * pa[0], rb[k] * pa[1]);
+        add(b_, k, ra[k] * pb[0], ra[k] * pb[1]);
+        add(c0, k, -(ra[k] + rb[k]), 0);
+      }
+      const idx = [], wr = [], wi = [];
+      acc.forEach((val, key) => { idx.push(key); wr.push(val[0]); wi.push(val[1]); });
+      term(idx, wr, wi, 2 * (3 * b / (8 * Math.hypot(...ra) * Math.hypot(...rb))));
+    }
+  }
+  return M;
+}
+const KCONV = 521.47;
+function paramsFor(kind, ctrl) {
+  const M = PARAMS.M, aZ = PARAMS.znse.alpha, bZ = aZ * PARAMS.znse.betaRatio, C = PARAMS.ch;
+  if (kind === 'ZB') return { mass: { c1: M.Zn, c2: M.Zn, se: M.Se }, al: { c1: aZ, c2: aZ, se: 0 }, be: { c1: bZ, c2: bZ, se: 0 } };
+  return {
+    mass: { c1: lerp(M.Zn, M.Cu, ctrl.mass), c2: lerp(M.Zn, M.In, ctrl.mass), se: M.Se },
+    al: { c1: lerp(aZ, C.aCu, ctrl.dmat), c2: lerp(aZ, C.aIn, ctrl.dmat), se: 0 },
+    be: { c1: lerp(bZ, C.bCu, ctrl.dmat), c2: lerp(bZ, C.bIn, ctrl.dmat), se: 0 }
+  };
+}
+// bands of `kind` at ZB wavevector k (units 2pi/a, cubic axes): [{f, w}] ; w = spectral weight on the 6 ZB plane waves
+function bandsAt(kind, ctrl, k, a0) {
+  const g = kind === 'ZB' ? 0 : ctrl.geom;
+  const { S, bonds, T } = dispStruct(kind, g);
+  const P = paramsFor(kind, ctrl), types = S.types, N = types.length, n = 3 * N;
+  const f2 = 2 * Math.PI / a0, q = [k[0] * f2, k[1] * f2, k[2] * f2];
+  const M = hessQ(types, bonds, T, P.al, P.be, q);
+  const n2 = 2 * n, m = [];
+  for (let a = 0; a < N; a++) for (let c = 0; c < 3; c++) m.push(P.mass[types[a]]);
+  for (let a = 0; a < n2; a++) for (let b = 0; b < n2; b++) M[a * n2 + b] /= Math.sqrt(m[a % n] * m[b % n]);
+  const { ev, V } = eigSym(M, n2);
+  const nc = types.reduce((s, t) => s + (t !== 'se' ? 1 : 0), 0), nprim = nc;     // number of ZB primitive cells in the cell
+  const out = [];
+  for (let b = 0; b < n; b++) {
+    let w = 0, fq = 0;
+    for (const col of [2 * b, 2 * b + 1]) {
+      fq += ev[col] / 2;
+      for (const sub of [0, 1]) for (let c = 0; c < 3; c++) {
+        let re = 0, im = 0;
+        for (let at = 0; at < N; at++) {
+          if ((types[at] === 'se') !== (sub === 1)) continue;
+          const zr = V[(3 * at + c) * n2 + col], zi = V[(3 * at + c + n) * n2 + col];
+          const x = -(q[0] * S.pos[at][0] + q[1] * S.pos[at][1] + q[2] * S.pos[at][2]), cs = Math.cos(x), sn = Math.sin(x);
+          re += zr * cs - zi * sn; im += zr * sn + zi * cs;
+        }
+        w += (re * re + im * im) / nprim;
+      }
+    }
+    out.push({ f: KCONV * Math.sqrt(Math.max(fq, 0)), w: w / 2 });
+  }
+  for (let i = 0; i < out.length;) {                 // degenerate levels: the plane-wave weight is only defined for the whole level
+    let j = i + 1, sw = out[i].w;
+    while (j < out.length && out[j].f - out[i].f < 0.05) { sw += out[j].w; j++; }
+    for (let r = i; r < j; r++) out[r].w = sw / (j - i);
+    i = j;
+  }
+  return out;
+}
+if (typeof module !== 'undefined') module.exports = { bandsAt, eigSym, hessQ, dispStruct };
+
+</script>
+<script>
+(function(){
+  var $ = function(id){return document.getElementById(id)};
+  var state = {src:'HS', asr:false, kind:'CH', tens:0, mass:0, dmat:0, geom:0, link:true, dEnd:0.30, gamma:4, yauto:false, yscale:'sqrt',
+               shade:'species', shadeK:'CH', sel:{CH:null,CA:null}, view:'obl', showEnd:true, play:true, speed:1, fscale:true, spin:false, linkRot:true, scl:{}};
+  var anim = {panels:[], t0:0, phase:0.6, last:0, raf:0};
+  var caches = {CH:{}, CA:{}};
+  var refMemo = {};
+  var lastLayout = null;
+  var SPN = {HS:['Cu','In','Se'], CR:['In','Cu','Se'], AI:['Cu','In','Se'], KV:['Cu','In','Se']};      // species of type index 0,1,2 per engine
+  var SPC = {In:'var(--sp-in)', Cu:'var(--sp-cu)', Se:'var(--sp-se)'};
+  var KC = {CH:'var(--series-1)', CA:'var(--series-2)'};
+
+  function fmt(v){ return v>=10? v.toFixed(1): v>=1? v.toFixed(2): v>=0.1? v.toFixed(3): v.toFixed(4); }
+  function nf(v){ return v>=100? v.toFixed(0): v>=10? v.toFixed(1): v>=1? v.toFixed(2): v.toFixed(3); }
+  function pc(v){ return (100*v).toFixed(0)+'%'; }
+  function ctrl(o){ return {mass:o.mass, dmat:o.dmat, geom:o.geom, tens:o.tens, dStar:state.dEnd}; }
+  function kinds(){ return state.kind==='BOTH' ? ['CH','CA'] : [state.kind==='CA' && state.src==='AI' ? 'CH' : state.kind]; }
+  function ev(o,k){
+    if(state.src==='HS') return evaluateHS(k, {mass:o.mass, dmat:o.dmat, tens:o.tens, asrR:state.asr});
+    if(state.src==='CR') return evaluateCR(k, {mass:o.mass, dmat:o.dmat, tens:o.tens, asrR:state.asr});
+    if(state.src==='AI') return evaluateAI({mass:o.mass, dmat:o.dmat, tens:o.tens, asrR:state.asr});
+    return evaluate(k, ctrl(o), caches[k]);
+  }
+  function hasSp(){ return state.src!=='KV'; }
+  function shadeMode(){ return hasSp() ? state.shade : 'fold'; }
+  function shadeKind(ks){ return ks.length>1 ? state.shadeK : ks[0]; }
+
+  function refs(k){
+    var key = state.src+'|'+HS_MAT+'|'+k+'|'+state.dEnd+'|'+state.asr;
+    if(!refMemo[key]){
+      var zn = ev({mass:0,dmat:0,geom:0,tens:0},k);
+      var en = ev({mass:1,dmat:1,geom:1,tens:1},k);
+      var a1 = null;
+      en.forEach(function(l){ if(l.vecs && l.deg===1 && l.p && l.p[2]>0.999 && (!a1 || l.I>a1.I)) a1 = l; });
+      refMemo[key] = {zn:zn, en:en, I0: totalIntensity(zn), a1ref: a1 ? a1.vec : null};
+    }
+    return refMemo[key];
+  }
+  // the zone-folded A1 level in a list of levels: largest projection onto the reference A1 pattern
+  function a1Level(levels, ref){
+    if(!ref) return null;
+    var rr = 0; for(var i=0;i<ref.length;i++) rr += ref[i]*ref[i];
+    var best = null, bc = 0;
+    levels.forEach(function(l){
+      if(!l.vecs) return;
+      var c = 0;
+      l.vecs.forEach(function(u){ var ru = 0, uu = 0; for(var i=0;i<u.length;i++){ ru += ref[i]*u[i]; uu += u[i]*u[i]; } if(uu>0) c += ru*ru/(rr*uu); });
+      if(c>bc){ bc = c; best = l; }
+    });
+    return bc>0.9 ? best : null;
+  }
+  // weight functions per line
+  function tshare(l,s){ var pos=l.Is.map(function(x){return Math.max(x,0)}), t=pos[0]+pos[1]+pos[2]; return t>0 ? l.I*pos[s]/t : 0; }
+  function compFn(mode, s){
+    if(mode==='fold') return function(l){ return l.I*(1-l.w); };
+    if(mode==='species') return function(l){ return l.I*l.p[s]; };
+    return function(l){ return tshare(l,s); };
+  }
+  function spectrum(levels, I0, xs, fn){
+    var g = state.gamma/2, out = new Float64Array(xs.length);
+    levels.forEach(function(l){
+      var wgt = fn(l) / I0 * g / Math.PI;
+      if(wgt < 1e-9) return;
+      for(var i=0;i<xs.length;i++){ var d = xs[i]-l.f; out[i] += wgt/(d*d+g*g); }
+    });
+    return out;
+  }
+  function niceMax(v){ var p = Math.pow(10, Math.floor(Math.log10(v))); var m = v/p; var n = m<=1?1: m<=2?2: m<=2.5?2.5: m<=5?5:10; return n*p; }
+  function pick(levels, f){            // any line can be picked, also those with zero weight
+    var best = null, bd = 1e9;
+    if(f===null || f===undefined){ levels.forEach(function(l){ if(!best || l.I>best.I) best = l; }); return best; }
+    levels.forEach(function(l){ var d = Math.abs(l.f-f); if(d<bd){ bd = d; best = l; } });
+    return best || levels[0];
+  }
+  function pickVisible(levels, f){     // for clicks on the spectrum: nearest line that is visible at all
+    var tot = totalIntensity(levels), best = null, bd = 1e9;
+    levels.forEach(function(l){ if(l.I/tot<1e-4) return; var d = Math.abs(l.f-f); if(d<bd){ bd = d; best = l; } });
+    return best || pick(levels, f);
+  }
+  var sf = function(key){ var v = state.scl[key]; return (v>0 && isFinite(v)) ? v : 1; };
+  var fx = function(v){ return (v>=1000 || v<0.01) ? v.toExponential(1) : String(+v.toPrecision(3)); };
+  function spNames(){ return SPN[state.src]; }
+  function siteLabel(name){ return name==='Se' ? 'Se' : name+' site'; }
+
+  function draw(){
+    var ks = kinds(), sk = shadeKind(ks), mode = shadeMode(), names = spNames();
+    var xmin = 30, xmax = (state.src==='HS' && HS_MAT==='S') ? 360 : 260, xs = []; for(var x=xmin; x<=xmax; x+=0.5) xs.push(x);
+    var D = {}, ymaxRef = 0;
+    var mx = function(a){ var m=0; for(var i=0;i<a.length;i++) if(a[i]>m) m=a[i]; return m; };
+    ks.forEach(function(k){
+      var R = refs(k), cur = ev(state,k);
+      var d = {R:R, cur:cur, a1:a1Level(cur, R.a1ref), a1E:a1Level(R.en, R.a1ref), sZ:spectrum(R.zn,R.I0,xs,function(l){return l.I}), sE:spectrum(R.en,R.I0,xs,function(l){return l.I}), sC:spectrum(cur,R.I0,xs,function(l){return l.I})};
+      if(k===sk){
+        if(mode==='fold') d.parts = [spectrum(cur,R.I0,xs,compFn('fold'))];
+        else d.parts = [0,1,2].map(function(s){ return spectrum(cur,R.I0,xs,compFn(mode,s)); });
+      }
+      var mul = function(a,f){ if(f!==1) for(var q=0;q<a.length;q++) a[q] *= f; };
+      if(k===ks[0]) mul(d.sZ, sf('Z')); mul(d.sE, sf('end:'+k)); mul(d.sC, sf('cur:'+k));
+      if(d.parts) d.parts.forEach(function(a){ mul(a, sf('cur:'+k)); });
+      D[k] = d; ymaxRef = Math.max(ymaxRef, mx(d.sZ), mx(d.sE), (state.yauto || sf('cur:'+k)!==1) ? mx(d.sC) : 0);
+    });
+    var ymax = niceMax(ymaxRef*1.1);
+    var host = $('chart'); var W = Math.max(host.clientWidth, 280), H = W < 520 ? 270 : 340, strips = hasSp() ? ks.length*2 : 0, HS = strips ? strips*20+8 : 0;
+    var m = {l:62, r:12, t:10, b:38}, pw = W-m.l-m.r, ph = H-m.t-m.b;
+    var X = function(v){ return m.l + (v-xmin)/(xmax-xmin)*pw; };
+    var sq = state.yscale==='sqrt', lg = state.yscale==='log', lo = ymax*1e-4;
+    var Y = function(v){ var f; if(lg){ f = (Math.log10(Math.max(v,lo)) - Math.log10(lo))/4; } else { f = Math.max(v,0)/ymax; if(sq) f = Math.sqrt(f); } if(f>1.02) f = 1.02; return m.t + ph*(1-f); };
+    var yt;
+    if(lg){ yt = []; for(var e=Math.floor(Math.log10(ymax)); Math.pow(10,e)>=lo*0.999; e--) yt.push(Math.pow(10,e)); }
+    else yt = sq ? [0,0.01,0.05,0.2,0.5,1].map(function(f){return f*ymax}) : [0,0.25,0.5,0.75,1].map(function(f){return f*ymax});
+    var ylab = function(v){ if(v===0) return '0'; if(lg) return v>=1 ? String(Math.round(v)) : v>=0.001 ? String(+v.toPrecision(1)) : v.toExponential(0); return fmt(v); };
+    var s = '<svg viewBox="0 0 '+W+' '+(H+HS)+'" role="img" aria-label="Raman spectrum, intensity versus Raman shift in reciprocal centimeters">';
+    s += '<g class="axis">';
+    yt.forEach(function(v){ var y = Y(v); s += '<line x1="'+m.l+'" x2="'+(W-m.r)+'" y1="'+y+'" y2="'+y+'" stroke="var(--line-soft)" stroke-width="1"/><text x="'+(m.l-6)+'" y="'+(y+4)+'" text-anchor="end">'+ylab(v)+'</text>'; });
+    for(var t=50; t<=xmax; t+=50){ s += '<line x1="'+X(t)+'" x2="'+X(t)+'" y1="'+(m.t+ph)+'" y2="'+(m.t+ph+4)+'" stroke="var(--muted)"/><text x="'+X(t)+'" y="'+(m.t+ph+17)+'" text-anchor="middle">'+t+'</text>'; }
+    s += '<line x1="'+m.l+'" x2="'+(W-m.r)+'" y1="'+(m.t+ph)+'" y2="'+(m.t+ph)+'" stroke="var(--muted)"/></g>';
+    s += '<text class="axis-title" x="'+(m.l+pw/2)+'" y="'+(H-6)+'" text-anchor="middle">Raman shift (cm⁻¹)</text>';
+    s += '<text class="axis-title" transform="translate(11 '+(m.t+ph/2)+') rotate(-90)" text-anchor="middle">Intensity (ZnSe total = 1)</text>';
+    var path = function(a){ var d=''; for(var i=0;i<xs.length;i++) d += (i?'L':'M')+X(xs[i]).toFixed(1)+' '+Y(a[i]).toFixed(1); return d; };
+    var area = function(a){ return path(a)+'L'+X(xmax)+' '+Y(0)+'L'+X(xmin)+' '+Y(0)+'Z'; };
+    // shading of the chosen structure
+    var dk = D[sk];
+    if(mode==='fold'){ s += '<path d="'+area(dk.parts[0])+'" fill="var(--series-3)" fill-opacity="0.38" stroke="none"/>'; }
+    else {
+      var cum = [0,1,2].map(function(){return new Float64Array(xs.length)});
+      // stack order from the bottom: Se, then the two cation sites
+      var order = [2,0,1], acc = new Float64Array(xs.length), layers = [];
+      order.forEach(function(s2){ var p = dk.parts[s2], nxt = new Float64Array(xs.length); for(var i=0;i<xs.length;i++) nxt[i] = acc[i]+p[i]; layers.push({s:s2, top:nxt}); acc = nxt; });
+      for(var q=layers.length-1; q>=0; q--) s += '<path d="'+area(layers[q].top)+'" fill="'+SPC[names[layers[q].s]]+'" fill-opacity="0.62" stroke="none"/>';
+    }
+    ks.forEach(function(k){
+      var d = D[k], both = ks.length>1, col = both ? KC[k] : 'var(--series-1)', ecol = both ? KC[k] : 'var(--series-2)';
+      if(k===ks[0]) s += '<path d="'+path(d.sZ)+'" fill="none" stroke="var(--ref)" stroke-width="1.5" stroke-dasharray="6 4"/>';
+      if(state.showEnd) s += '<path d="'+path(d.sE)+'" fill="none" stroke="'+ecol+'" stroke-width="1.5" stroke-dasharray="1.5 3.5" stroke-linecap="round" opacity="'+(both?0.7:1)+'"/>';
+      s += '<path d="'+path(d.sC)+'" fill="none" stroke="'+col+'" stroke-width="2" stroke-linejoin="round"/>';
+    });
+    // zone-folded A1 (dominant Raman line of CH/CA): circle on top of its peak, as in the paper figures
+    var peakAt = function(a, f){ var y = 0; for(var i=0;i<xs.length;i++) if(Math.abs(xs[i]-f)<=1) y = Math.max(y, a[i]); return y; };
+    var a1mark = function(f, a, c){ if(f<xmin || f>xmax) return ''; var cx = X(f), cy = Y(peakAt(a, f));
+      return '<circle cx="'+cx.toFixed(1)+'" cy="'+cy.toFixed(1)+'" r="6.5" fill="var(--surface)" stroke="var(--ink)" stroke-width="1.6"/><circle cx="'+cx.toFixed(1)+'" cy="'+cy.toFixed(1)+'" r="2.6" fill="'+c+'"/>'; };
+    ks.forEach(function(k){
+      var d = D[k], both = ks.length>1, col = both ? KC[k] : 'var(--series-1)', ecol = both ? KC[k] : 'var(--series-2)';
+      if(state.showEnd && d.a1E) s += a1mark(d.a1E.f, d.sE, ecol);
+      if(d.a1) s += a1mark(d.a1.f, d.sC, col);
+    });
+    var snote = []; if(sf('Z')!==1) snote.push('ZnSe ×'+fx(sf('Z'))); ks.forEach(function(k){ if(sf('cur:'+k)!==1) snote.push((ks.length>1?k+' ':'current ')+'×'+fx(sf('cur:'+k))); if(sf('end:'+k)!==1) snote.push((ks.length>1?k+' ':'')+'all-at-1 ×'+fx(sf('end:'+k))); });
+    if(snote.length) s += '<text x="'+(m.l+8)+'" y="'+(m.t+14)+'" font-size="11" fill="var(--series-2)" style="font-family:var(--font-ui);font-weight:600">scaled for display: '+snote.join(', ')+'</text>';
+    // character strips: one stacked bar per line, colored by species share; faint = weak line
+    if(strips){
+      var row = 0;
+      ks.forEach(function(k){
+        var cur = D[k].cur, T = totalIntensity(cur), y0 = H+4+row*40;
+        [['moves',function(l){return [l.p[0],l.p[1],l.p[2]]}],['dχ/du',function(l){ var pos=l.Is.map(function(x){return Math.max(x,0)}), t=pos[0]+pos[1]+pos[2]; return t>0 ? pos.map(function(x){return x/t}) : [0,0,0]; }]].forEach(function(rw,ri){
+          var y = y0+ri*20;
+          s += '<text x="'+(m.l-6)+'" y="'+(y+12)+'" text-anchor="end" class="axis-title" style="font-size:10.5px">'+(ks.length>1?k+' ':'')+rw[0]+'</text><rect x="'+m.l+'" y="'+y+'" width="'+pw+'" height="16" fill="none" stroke="var(--line-soft)"/>';
+          cur.forEach(function(l){
+            var sh = l.I/T; if(sh<0.001 || l.f<xmin || l.f>xmax) return;
+            var f3 = rw[1](l), op = Math.min(1, 0.3+0.7*Math.sqrt(sh/0.25)), acc2 = 0;
+            [2,0,1].forEach(function(s2){ var hgt = 16*f3[s2]; if(hgt<0.2) return; s += '<rect x="'+(X(l.f)-2.5)+'" y="'+(y+16-acc2-hgt)+'" width="5" height="'+hgt+'" fill="'+SPC[names[s2]]+'" fill-opacity="'+op.toFixed(2)+'"/>'; acc2 += hgt; });
+          });
+        });
+        row++;
+      });
+    }
+    // selected lines
+    ks.forEach(function(k){ var l = pick(D[k].cur, state.sel[k]), col = ks.length>1 ? KC[k] : 'var(--series-1)';
+      s += '<line x1="'+X(l.f)+'" x2="'+X(l.f)+'" y1="'+m.t+'" y2="'+(m.t+ph)+'" stroke="'+col+'" stroke-width="1" stroke-dasharray="2 3" opacity="0.9"/><path d="M'+(X(l.f)-4)+' '+(m.t)+'L'+(X(l.f)+4)+' '+(m.t)+'L'+X(l.f)+' '+(m.t+7)+'Z" fill="'+col+'"/>'; });
+    s += '<line id="xh" x1="0" x2="0" y1="'+m.t+'" y2="'+(m.t+ph)+'" stroke="var(--muted)" stroke-width="1" visibility="hidden"/>';
+    s += '<rect id="hit" x="'+m.l+'" y="'+m.t+'" width="'+pw+'" height="'+ph+'" fill="transparent" style="cursor:crosshair"/></svg>';
+    host.innerHTML = s + '<div id="tip" hidden></div>';
+    lastLayout = {xs:xs, D:D, ks:ks, sk:sk, mode:mode, names:names, ymax:ymax, lg:lg, lo:lo, sq:sq};
+
+    var svg = host.querySelector('svg'), hit = $('hit'), xh = $('xh'), tip = $('tip');
+    function idxOf(ev){
+      var r = svg.getBoundingClientRect(); var px = (ev.clientX - r.left) * (W / r.width);
+      var f = xmin + (px - m.l)/pw*(xmax-xmin); if(f<xmin||f>xmax) return -1;
+      return Math.max(0, Math.min(xs.length-1, Math.round((f-xmin)/0.5)));
+    }
+    function move(ev){
+      var i = idxOf(ev); if(i<0){ leave(); return; }
+      var r = svg.getBoundingClientRect();
+      xh.setAttribute('x1', X(xs[i])); xh.setAttribute('x2', X(xs[i])); xh.setAttribute('visibility','visible');
+      var h = '<div class="f">'+xs[i].toFixed(1)+' cm⁻¹ <span style="color:var(--muted);font-weight:400">(click to pick the line)</span></div>';
+      ks.forEach(function(k){
+        var d = D[k], col = ks.length>1 ? KC[k] : 'var(--series-1)';
+        h += '<div><i style="background:'+col+'"></i>'+(ks.length>1?k+' ':'current ')+fmt(d.sC[i])+(sf('cur:'+k)!==1?' (×'+fx(sf('cur:'+k))+')':'')+'</div>';
+      });
+      h += '<div><i style="background:var(--ref)"></i>ZnSe '+fmt(D[ks[0]].sZ[i])+'</div>';
+      ks.forEach(function(k){
+        var d = D[k], tot = totalIntensity(d.cur), near = null, best = 8;
+        d.cur.forEach(function(l){ var dd = Math.abs(l.f-xs[i]); if(dd<best && l.I/tot>0.001){ best = dd; near = l; } });
+        if(near){
+          h += '<div style="margin-top:4px;color:var(--ink-2)">'+(ks.length>1?k+' ':'')+(near===d.a1?'A₁ (zone-folded) ':'')+'line at '+near.f.toFixed(1)+(near.deg>1?' (×'+near.deg+')':'')+': '+(100*near.I/tot).toFixed(1)+'% of weight, '+(100*near.w).toFixed(0)+'% ZB-allowed'
+            + (near.p ? '<br>moves: '+[0,1,2].map(function(s2){ return names[s2]+' '+pc(near.p[s2]); }).join(', ') : '') + '</div>';
+        }
+      });
+      tip.innerHTML = h; tip.hidden = false;
+      var tx = X(xs[i]) * (r.width / W) + 12; if(tx + 230 > r.width) tx = X(xs[i])*(r.width/W) - 242; if(tx<0) tx=4;
+      tip.style.left = tx+'px'; tip.style.top = '8px';
+    }
+    function leave(){ xh.setAttribute('visibility','hidden'); tip.hidden = true; }
+    hit.addEventListener('pointermove', move); hit.addEventListener('pointerleave', leave); hit.addEventListener('pointerdown', move);
+    hit.addEventListener('click', function(ev){ var i = idxOf(ev); if(i<0) return; ks.forEach(function(k){ state.sel[k] = pickVisible(D[k].cur, xs[i]).f; }); draw(); });
+
+    // legend
+    var sw = function(c,dash,w){ return '<svg width="26" height="8" aria-hidden="true"><line x1="1" x2="25" y1="4" y2="4" stroke="'+c+'" stroke-width="'+w+'"'+(dash?' stroke-dasharray="'+dash+'"':'')+' stroke-linecap="round"/></svg>'; };
+    var box = function(c){ return '<svg width="14" height="10" aria-hidden="true"><rect x="0" y="1" width="14" height="8" rx="2" fill="'+c+'" fill-opacity="0.7"/></svg>'; };
+    var both = ks.length>1, lg2 = '';
+    ks.forEach(function(k){ lg2 += '<span>'+sw(both?KC[k]:'var(--series-1)','',2)+(both?k+' at the current sliders':'current sliders')+(sf('cur:'+k)!==1?' ×'+fx(sf('cur:'+k)):'')+'</span>'; });
+    lg2 += '<span>'+sw('var(--ref)','6 4',1.5)+(state.src==='AI'?'ZnSe (QE, 8-atom cell)':both?'ZnSe (CH cell)':'ZnSe in the '+ks[0]+' cell'+(state.src==='HS'?' (HSE)':''))+(sf('Z')!==1?' ×'+fx(sf('Z')):'')+'</span>';
+    if(state.showEnd) lg2 += ks.map(function(k){ return '<span>'+sw(both?KC[k]:'var(--series-2)','1.5 3.5',1.75)+'CuInSe₂ '+(state.src==='AI'?'CH':k)+' ('+(state.src==='HS'?'HSE06':state.src==='CR'?'CRYSTAL':state.src==='AI'?'QE':'model')+'), all sliders at 1'+(sf('end:'+k)!==1?' ×'+fx(sf('end:'+k)):'')+'</span>'; }).join('');
+    if(mode==='fold') lg2 += '<span>'+box('var(--series-3)')+'folded part'+(both?' of '+sk:'')+'</span>';
+    else {
+      lg2 += [2,0,1].map(function(s2){ return '<span>'+box(SPC[names[s2]])+siteLabel(names[s2])+'</span>'; }).join('') +
+             '<span style="color:var(--muted)">('+(mode==='species'?'atoms that move':'atoms whose dχ/du makes the intensity')+(both?', '+sk:'')+')</span>';
+    }
+    if(ks.some(function(k){ return D[k].a1; })) lg2 += '<span><svg width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="var(--surface)" stroke="var(--ink)" stroke-width="1.5"/><circle cx="8" cy="8" r="2.4" fill="var(--muted)"/></svg>A₁ (zone-folded '+(ks.length>1?'W in CH, X<sub>z</sub> in CA':ks[0]==='CH'?'W':'X<sub>z</sub>')+')</span>';
+    lg2 += '<span>'+'<svg width="12" height="10" aria-hidden="true"><path d="M1 1L11 1L6 9Z" fill="var(--muted)"/></svg>picked line</span>';
+    $('legend').innerHTML = lg2;
+
+    // stats
+    var d0 = D[sk], R0 = d0.R, tot = totalIntensity(d0.cur), fold = foldedIntensity(d0.cur);
+    $('st-fold').textContent = (fold/R0.I0).toFixed(3);
+    var share = tot>0 ? fold/tot : 0;
+    $('st-share').textContent = (100*share).toFixed(0)+'%';
+    $('bar').innerHTML = '<i style="width:'+(100*(1-share)).toFixed(1)+'%;background:var(--series-1)"></i><i style="width:'+(100*share).toFixed(1)+'%;background:var(--series-3)"></i>';
+    var top = d0.cur.slice().sort(function(a,b){return b.I-a.I})[0];
+    $('st-top').textContent = top.f.toFixed(1)+' cm⁻¹';
+    $('st-lab').textContent = both ? '(' + sk + ')' : '';
+    // species bars
+    if(hasSp()){
+      var sb = '';
+      ks.forEach(function(k){
+        var cur = D[k].cur, T = totalIntensity(cur), pv = [0,0,0], pt = [0,0,0];
+        cur.forEach(function(l){ for(var s2=0;s2<3;s2++){ pv[s2] += l.I*l.p[s2]; pt[s2] += tshare(l,s2); } });
+        var tv = pv[0]+pv[1]+pv[2] || 1, tt = pt[0]+pt[1]+pt[2] || 1;
+        var bar = function(a,tt2){ return '<div class="bar" style="margin-top:3px">'+[2,0,1].map(function(s2){ return '<i style="width:'+(100*a[s2]/tt2).toFixed(1)+'%;background:'+SPC[names[s2]]+'"></i>'; }).join('')+'</div>'; };
+        var txt = function(a,tt2){ return [2,0,1].map(function(s2){ return names[s2]+' '+pc(a[s2]/tt2); }).join(' · '); };
+        var rN = function(t){ return state.src==='HS' ? rNormsHS(k,t) : state.src==='CR' ? rNormsCR(k,t) : rNormsAI(t); }, nz = rN(0), nc = rN(state.tens);
+        var ntxt = function(a){ var o = []; [2,0,1].forEach(function(s2){ o.push(names[s2]+' '+a[s2].toFixed(a[s2]<10?1:0)); }); return o.join(' · '); };
+        sb += '<div class="spb"><div class="k" style="margin-bottom:6px"><b>'+(ks.length>1?k+': ':'')+'size of dχ/du per atom</b> (arbitrary units, current tensor slider): '+ntxt(nc)+'; ZnSe tensor: '+ntxt(nz)+'</div><div class="k"><b>'+(ks.length>1?k+': ':'')+'</b>atoms that move, weighted by intensity: '+txt(pv,tv)+'</div>'+bar(pv,tv)+
+              '<div class="k" style="margin-top:6px">atoms whose dχ/du makes the intensity: '+txt(pt,tt)+'</div>'+bar(pt,tt)+'</div>';
+      });
+      $('spbars').innerHTML = sb; $('spbars').hidden = false;
+    } else $('spbars').hidden = true;
+
+    // tables
+    var html = '';
+    ks.forEach(function(k){
+      var cur = D[k].cur, T = totalIntensity(cur);
+      html += '<div class="tblwrap"><table>' + (ks.length>1?'<caption>'+k+'</caption>':'') + '<tr><th>Line (cm⁻¹, click a row)</th><th>Deg.</th><th>Share of weight</th><th>ZB-allowed</th>' +
+        (hasSp() ? '<th>moves: '+names[2]+'</th><th>'+names[0]+'</th><th>'+names[1]+'</th><th>tensor: '+names[2]+'</th><th>'+names[0]+'</th><th>'+names[1]+'</th>' : '<th>Folded</th>') + '</tr>';
+      cur.forEach(function(l){
+        var pk = pick(cur, state.sel[k])===l;
+        html += '<tr data-f="'+l.f.toFixed(3)+'" data-k="'+k+'" title="Click to show this line in the structure view" class="'+(pk?'sel':'')+'"><td>'+l.f.toFixed(1)+'</td><td>'+l.deg+'</td><td>'+(100*l.I/T).toFixed(2)+'%</td><td>'+pc(l.w)+'</td>' +
+          (hasSp() ? [2,0,1].map(function(s2){return '<td>'+pc(l.p[s2])+'</td>'}).join('') + [2,0,1].map(function(s2){ return '<td>'+pc(l.I>0 ? tshare(l,s2)/l.I : 0)+'</td>'; }).join('') : '<td>'+pc(1-l.w)+'</td>') + '</tr>';
+      });
+      html += '</table></div>';
+    });
+    $('tbody').innerHTML = html;
+    drawVib(D);
+  }
+
+  // ---------- rotatable ball-and-stick (canvas) ----------
+  function geomFor(k){
+    if(state.src==='CR'){ var g = GEO['CR_'+k]; return {L:g.L, pos:g.pos, box:g.box, o:g.o, ty:g.ty}; }
+    var a = state.src==='HS' ? GEO_HS[k] : GEO.AI, t = state.dmat, lp = function(A,B){ return A.map(function(r,i){ return r.map ? r.map(function(v,j){ return v+(B[i][j]-v)*t; }) : r+(B[i]-r)*t; }); };
+    return {L:lp(a.LZ,a.LC), pos:lp(a.posZ,a.posC), box:lp(a.boxZ,a.boxC), o:a.o, ty:a.ty};
+  }
+  function mmul(A,B){ var C=[]; for(var i=0;i<3;i++) for(var j=0;j<3;j++){ var t=0; for(var k=0;k<3;k++) t += A[3*i+k]*B[3*k+j]; C[3*i+j]=t; } return C; }
+  function Rxm(a){ var c=Math.cos(a), s=Math.sin(a); return [1,0,0, 0,c,-s, 0,s,c]; }
+  function Rym(a){ var c=Math.cos(a), s=Math.sin(a); return [c,0,s, 0,1,0, -s,0,c]; }
+  var BASE = {y:[1,0,0, 0,0,1, 0,-1,0], x:[0,1,0, 0,0,1, 1,0,0], z:[1,0,0, 0,1,0, 0,0,1]};   // world -> screen (x right, y up, z toward the viewer)
+  function viewMat(n){ return n==='obl' ? mmul(Rxm(0.45), mmul(Rym(0.6), BASE.y)) : BASE[n].slice(); }
+  var rot = {CH:viewMat('obl'), CA:viewMat('obl')}, vscenes = [], cols = null, frameN = 0;
+  function cssv(n){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim() || '#888'; }
+  function getCols(){ return {ink:cssv('--ink'), muted:cssv('--muted'), line:cssv('--line'), surface:cssv('--surface'), sp:{In:cssv('--sp-in'), Cu:cssv('--sp-cu'), Se:cssv('--sp-se')}}; }
+  function rotateBy(k, dx, dy){
+    var M = mmul(Rxm(dy), Rym(dx));
+    (state.linkRot ? ['CH','CA'] : [k]).forEach(function(q){ rot[q] = mmul(M, rot[q]); });
+  }
+  var EDGES = [[0,1],[2,3],[4,5],[6,7],[0,2],[1,3],[4,6],[5,7],[0,4],[1,5],[2,6],[3,7]];
+  function paint(P, phase){
+    var ctx = P.ctx, W = P.W, H = P.H, R = rot[P.k], S = P.S, C = cols;
+    ctx.clearRect(0,0,W,H);
+    var rate = state.fscale ? P.f/180 : 1, ph = phase*rate, sn = Math.sin(ph), c0 = Math.cos(ph), cs = c0>=0 ? Math.max(c0,0.3) : Math.min(c0,-0.3);
+    var pj = function(v){ return [R[0]*v[0]+R[1]*v[1]+R[2]*v[2], R[3]*v[0]+R[4]*v[1]+R[5]*v[2], R[6]*v[0]+R[7]*v[1]+R[8]*v[2]]; };
+    var X = function(q){ return W/2 + q[0]*S; }, Y = function(q){ return H/2 - q[1]*S; };
+    ctx.lineWidth = 1; ctx.strokeStyle = C.line; ctx.setLineDash([4,3]);
+    EDGES.forEach(function(e){ var a = pj(P.corners[e[0]]), b = pj(P.corners[e[1]]); ctx.beginPath(); ctx.moveTo(X(a),Y(a)); ctx.lineTo(X(b),Y(b)); ctx.stroke(); });
+    ctx.setLineDash([]);
+    var amp = 0.6, arr = 1.8;
+    var pts = P.atoms.map(function(A){
+      return {A:A, q0:pj(A.p), q:pj([A.p[0]+A.u[0]*amp*sn, A.p[1]+A.u[1]*amp*sn, A.p[2]+A.u[2]*amp*sn]), va:pj([A.u[0]*arr*cs, A.u[1]*arr*cs, A.u[2]*arr*cs])};
+    });
+    var prims = [];
+    P.bonds.forEach(function(b){ prims.push({d:(pts[b[0]].q[2]+pts[b[1]].q[2])/2 - 0.2, b:b}); });
+    pts.forEach(function(p,i){ prims.push({d:p.q[2], i:i}); });
+    prims.sort(function(a,b){ return a.d-b.d; });
+    var Rs = P.Rs;
+    prims.forEach(function(pr){
+      if(pr.b){
+        var a = pts[pr.b[0]].q, b = pts[pr.b[1]].q, al = 0.35+0.35*((pr.d/Rs)+1)/2;
+        ctx.strokeStyle = C.muted; ctx.globalAlpha = al; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(X(a),Y(a)); ctx.lineTo(X(b),Y(b)); ctx.stroke(); ctx.globalAlpha = 1; return;
+      }
+      var p = pts[pr.i], A = p.A, se = A.nm==='Se', r = (se?0.5:0.36)*S*(1+0.10*p.q[2]/Rs), x = X(p.q), y = Y(p.q);
+      var x0 = X(p.q0), y0 = Y(p.q0);
+      ctx.strokeStyle = C.muted; ctx.lineWidth = 1; ctx.setLineDash([2,2]); ctx.beginPath(); ctx.arc(x0,y0,r*0.45,0,6.2832); ctx.stroke(); ctx.setLineDash([]);
+      ctx.globalAlpha = 0.65+0.35*((p.q[2]/Rs)+1)/2; ctx.fillStyle = C.sp[A.nm]; ctx.beginPath(); ctx.arc(x,y,r,0,6.2832); ctx.fill();
+      ctx.globalAlpha = 1; ctx.strokeStyle = C.surface; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.fillStyle = '#fff'; ctx.font = '600 '+Math.max(9,r*0.62).toFixed(0)+'px '+P.font; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.strokeText(A.sym,x,y+0.5); ctx.fillText(A.sym,x,y+0.5);
+      var dx = p.va[0]*S, dy = -p.va[1]*S, len = Math.hypot(dx,dy);
+      if(A.mov && len>3){
+        var ex = x+dx, ey = y+dy, ux = dx/len, uy = dy/len, hs = Math.min(9, 4+len*0.25);
+        ctx.globalAlpha = 0.45+0.55*Math.abs(c0); ctx.strokeStyle = C.ink; ctx.fillStyle = C.ink; ctx.lineWidth = 2.4; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(ex-ux*hs*0.6,ey-uy*hs*0.6); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(ex,ey); ctx.lineTo(ex-ux*hs-uy*hs*0.5,ey-uy*hs+ux*hs*0.5); ctx.lineTo(ex-ux*hs+uy*hs*0.5,ey-uy*hs-ux*hs*0.5); ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1;
+      }
+    });
+  }
+  function paintAll(){ if(!cols || (frameN++ % 120)===0) cols = getCols(); vscenes.forEach(function(P){ paint(P, anim.phase); }); }
+  function loop(ts){
+    anim.raf = 0;
+    var active = state.play || state.spin;
+    if(anim.last && active){
+      var dt = Math.min(0.1,(ts-anim.last)/1000);
+      if(state.play) anim.phase += dt * 2*Math.PI * 0.8 * state.speed;
+      if(state.spin){ var M = Rym(dt*0.7); ['CH','CA'].forEach(function(q){ rot[q] = mmul(M, rot[q]); }); }
+    }
+    anim.last = active ? ts : 0;
+    paintAll();
+    if(active && vscenes.length) anim.raf = requestAnimationFrame(loop);
+  }
+  function kick(){ if(!anim.raf) anim.raf = requestAnimationFrame(loop); }
+  function drawVib(D){
+    var host = $('vib');
+    if(!hasSp()){ host.innerHTML = '<p class="note">The ball-and-stick view needs normal-mode eigenvectors, which the CRYSTAL and Quantum ESPRESSO engines provide. Switch the engine to see it.</p>'; vscenes = []; return; }
+    var ks = lastLayout.ks, names = spNames(), out = '', specs = [];
+    ks.forEach(function(k){
+      var cur = D[k].cur, l = pick(cur, state.sel[k]), g = geomFor(k), N = g.ty.length, box = g.box;
+      var atoms = [], eps = 0.3, umax = 0;
+      for(var i2=0;i2<N;i2++){ var uu = Math.hypot(l.vec[3*i2],l.vec[3*i2+1],l.vec[3*i2+2]); if(uu>umax) umax = uu; }
+      for(var i=0;i<N;i++) for(var a=-2;a<=2;a++) for(var b=-2;b<=2;b++) for(var c=-2;c<=2;c++){
+        var p = [0,1,2].map(function(j){ return g.pos[i][j]-g.o[j] + a*g.L[0][j]+b*g.L[1][j]+c*g.L[2][j]; });
+        if([0,1,2].every(function(j){ return p[j]>=-eps && p[j]<=box[j]+eps; })){
+          var u = [l.vec[3*i]/umax, l.vec[3*i+1]/umax, l.vec[3*i+2]/umax], nm = names[g.ty[i]];
+          atoms.push({p:[p[0]-box[0]/2, p[1]-box[1]/2, p[2]-box[2]/2], u:u, nm:nm, sym:(nm==='Se'?((state.src==='HS'&&HS_MAT==='S')?'S':'Se'):(state.mass<0.5?'Zn':nm)), mov:Math.hypot(u[0],u[1],u[2])>0.05});
+        }
+      }
+      var bonds = [];
+      atoms.forEach(function(A,ia){ if(A.nm==='Se') return; atoms.forEach(function(B,ib){ if(B.nm!=='Se') return; if(Math.hypot(A.p[0]-B.p[0],A.p[1]-B.p[1],A.p[2]-B.p[2])<2.9) bonds.push([ia,ib]); }); });
+      var corners = []; for(var q=0;q<8;q++) corners.push([(q&1?1:-1)*box[0]/2, (q&2?1:-1)*box[1]/2, (q&4?1:-1)*box[2]/2]);
+      var Rs = 0.5*Math.hypot(box[0],box[1],box[2]) + 0.8;
+      specs.push({k:k, f:l.f, atoms:atoms, bonds:bonds, corners:corners, Rs:Rs});
+      var tot = totalIntensity(cur);
+      var chip = function(v,txt){ return '<span class="chip" style="--c:'+SPC[txt]+'">'+txt+' '+pc(v)+'</span>'; };
+      var head = '<div class="vh"><b style="color:'+(ks.length>1?KC[k]:'var(--series-1)')+'">'+(ks.length>1?k+' · ':'')+l.f.toFixed(1)+' cm⁻¹'+(l.deg>1?' (×'+l.deg+', one partner shown)':'')+'</b>' +
+        '<span class="k">'+(100*l.I/tot).toFixed(2)+'% of the Raman weight · '+pc(l.w)+' ZB-allowed</span></div>' +
+        '<div class="chips"><span class="k">moves:</span>'+[2,0,1].map(function(s2){ return chip(l.p[s2],names[s2]); }).join('')+'</div>' +
+        '<div class="chips"><span class="k">dχ/du:</span>'+[2,0,1].map(function(s2){ return chip(l.I>0 ? tshare(l,s2)/l.I : 0, names[s2]); }).join('')+'</div>';
+      out += '<div class="vcol">'+head+'<canvas class="vcv" id="cv'+k+'" role="img" aria-label="Rotatable ball-and-stick model of the '+k+' cell with the displacement pattern of the line at '+l.f.toFixed(1)+' reciprocal centimeters. Drag to rotate."></canvas></div>';
+    });
+    host.innerHTML = out; vscenes = [];
+    var dpr = window.devicePixelRatio || 1;
+    specs.forEach(function(P){
+      var cv = document.getElementById('cv'+P.k); if(!cv) return;
+      var W = Math.max(220, cv.clientWidth), H = 380; cv.style.height = H+'px'; cv.width = Math.round(W*dpr); cv.height = Math.round(H*dpr);
+      var ctx = cv.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+      P.ctx = ctx; P.W = W; P.H = H; P.S = Math.min(W,H)/2/P.Rs*0.95; P.font = cssv('--font-ui') || 'sans-serif';
+      var drag = null;
+      cv.addEventListener('pointerdown', function(e){ drag = {x:e.clientX, y:e.clientY}; try{ cv.setPointerCapture(e.pointerId); }catch(_){} cv.style.cursor = 'grabbing'; });
+      cv.addEventListener('pointermove', function(e){ if(!drag) return; rotateBy(P.k, (e.clientX-drag.x)*0.01, (e.clientY-drag.y)*0.01); drag = {x:e.clientX, y:e.clientY}; kick(); });
+      var up = function(){ drag = null; cv.style.cursor = 'grab'; };
+      cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up); cv.style.cursor = 'grab';
+      vscenes.push(P);
+    });
+    $('vib-cap').textContent = 'Drag a structure to rotate it (the two panels rotate together unless you untick the link). Balls oscillate along the normal mode about their equilibrium sites (dashed circles; amplitude exaggerated, largest = 0.6 Å). Arrows show the instantaneous velocity direction and speed of each moving atom, in 3D projected on the screen. The pattern repeats in every primitive cell (q = 0), cell box drawn as the conventional tetragonal cell. Atomic positions: '+(state.src==='CR'?'CRYSTAL relaxed cell':state.src==='HS'?'HSE cells (ZnSe → CuInSe₂), moved with the dynamical-matrix slider':'QE cell, moved with the dynamical-matrix slider')+'.';
+    kick();
+  }
+
+  // ---------- xmgrace ----------
+  function agr(){
+    var L = lastLayout; if(!L) return '';
+    var ks = L.ks, both = ks.length>1, sets = [];
+    var srcName = state.src==='HS' ? 'HSE06' : state.src==='CR' ? 'CRYSTAL' : state.src==='AI' ? 'QE' : 'model';
+    var CK = {ref:1, blue:4, orange:11, green:3, violet:8, amber:5, red:2};
+    var first = ks[0];
+    sets.push({n:'ZnSe'+(both?' (CH cell)':' in the '+first+' cell')+(sf('Z')!==1?' x'+fx(sf('Z')):''), y:L.D[first].sZ, c:CK.ref, ls:3, w:1.5});
+    ks.forEach(function(k){
+      var c = both ? (k==='CH'?CK.blue:CK.orange) : CK.blue;
+      sets.push({n:(both?k+' ':'')+'current sliders'+(sf('cur:'+k)!==1?' x'+fx(sf('cur:'+k)):''), y:L.D[k].sC, c:c, ls:1, w:2});
+      if(state.showEnd) sets.push({n:'CuInSe2 '+(state.src==='AI'?'CH':k)+' ('+srcName+'), all sliders at 1'+(sf('end:'+k)!==1?' x'+fx(sf('end:'+k)):''), y:L.D[k].sE, c:both?c:CK.orange, ls:2, w:1.5});
+    });
+    var dk = L.D[L.sk];
+    if(L.mode==='fold') sets.push({n:'folded part'+(both?' of '+L.sk:''), y:dk.parts[0], c:CK.green, ls:1, w:1});
+    else [2,0,1].forEach(function(s){ var nm = L.names[s]; sets.push({n:(L.mode==='species'?'atoms that move: ':'dchi/du of ')+nm+(both?' ('+L.sk+')':''), y:dk.parts[s], c:nm==='In'?CK.violet:nm==='Cu'?CK.amber:CK.green, ls:1, w:1}); });
+    var ymin = L.lg ? L.lo : 0, out = [];
+    out.push('# Grace project file (xmgrace), exported from the Zone-Folding Raman Explorer');
+    out.push('# engine: '+srcName+'; structure: '+(both?'CH and CA':first)+'; tensor '+state.tens.toFixed(2)+', masses '+state.mass.toFixed(2)+', dynamical matrix '+state.dmat.toFixed(2)+'; line width (FWHM) '+state.gamma+' cm-1');
+    if(L.sq) out.push('# note: the page showed a square-root intensity axis; the data below are plain intensities on a linear axis');
+    out.push('# intensity unit: ZnSe total Raman weight = 1');
+    var sn2 = Object.keys(state.scl).filter(function(q){ return sf(q)!==1; }).map(function(q){ return q+' x'+fx(sf(q)); }); if(sn2.length) out.push('# display scale factors applied to the curves below: '+sn2.join(', '));
+    ks.forEach(function(k){ out.push('# lines '+k+' (cm-1, share of weight, ZB-allowed weight'+(hasSp()?', moves '+L.names.join('/')+'':'')+'): '); L.D[k].cur.forEach(function(l){ var t = totalIntensity(L.D[k].cur); if(l.I/t>1e-4) out.push('#   '+l.f.toFixed(2)+'  '+(l.I/t).toFixed(4)+'  '+l.w.toFixed(3)+(l.p?'  '+l.p.map(function(v){return v.toFixed(2)}).join('/'):'')); }); });
+    out.push('@version 50125','@page size 792, 612','@page scroll 5%','@page inout 5%');
+    out.push('@with g0','@    world 30, '+ymin.toExponential(4)+', 260, '+L.ymax.toExponential(4),'@    view 0.15, 0.15, 1.15, 0.85');
+    out.push('@    xaxis  label "Raman shift (cm\\S-1\\N)"','@    xaxis  tick major 50','@    xaxis  tick minor ticks 4');
+    out.push('@    yaxis  label "Intensity (ZnSe total = 1)"');
+    if(L.lg) out.push('@    yaxes scale Logarithmic','@    yaxis  tick major 10','@    yaxis  tick minor ticks 8');
+    out.push('@    legend on','@    legend loctype view','@    legend 0.62, 0.83','@    legend char size 0.7');
+    sets.forEach(function(S,i){
+      out.push('@    s'+i+' type xy','@    s'+i+' line type 1','@    s'+i+' line linestyle '+S.ls,'@    s'+i+' line linewidth '+S.w,'@    s'+i+' line color '+S.c,'@    s'+i+' symbol 0','@    s'+i+' legend "'+S.n+'"');
+    });
+    sets.forEach(function(S,i){
+      out.push('@target G0.S'+i,'@type xy');
+      for(var j=0;j<L.xs.length;j++) out.push(L.xs[j].toFixed(1)+' '+Math.max(S.y[j], L.lg ? 1e-12 : 0).toExponential(6));
+      out.push('&');
+    });
+    return out.join('\n')+'\n';
+  }
+  window.__agr = function(){ return (state.src==='HS' && HS_MAT==='S') ? sulf(agr()) : agr(); };
+
+  function syncUI(){
+    var ai = state.src!=='KV', cr = state.src==='CR', qe = state.src==='AI', hs = state.src==='HS', kn = state.kind==='BOTH' ? 'CH' : state.kind;
+    var kl = state.kind==='BOTH' ? 'CH and CA' : kn;
+    $('o-tens').textContent = ai ? 'R = '+state.tens.toFixed(2) : 'δ = '+(state.tens*state.dEnd).toFixed(3)+'  ('+state.tens.toFixed(2)+')';
+    $('l-tens').textContent = ai ? 'Raman tensor' : 'Tensor contrast';
+    $('tens-lo').textContent = ai ? 'ZnSe dχ/du' : 'Cu-Se = In-Se';
+    $('tens-hi').innerHTML = hs ? kl+' dχ/du (HSE06)' : cr ? kl+' dχ/du (CRYSTAL)' : qe ? 'CH dχ/du (CuGaSe₂)' : 'δ = <span id="dEndLbl">'+state.dEnd.toFixed(2)+'</span>';
+    $('tens-hint').textContent = hs ? 'All dχ/du tensors of the cell (12 for CA, 24 for CH) are mixed linearly between the ZnSe and the CuInSe₂ HSE calculation in that cell.' : cr ? 'All dχ/du tensors of the cell (12 for CA, 24 for CH) are mixed linearly between the ZnSe tensor and the CRYSTAL tensor.' : qe ? 'All 24 dχ/du tensors of the 8-atom cell are mixed linearly between the ZnSe and the CH calculation.' : 'Cu-Se and In-Se bonds get polarizability derivatives scaled by 1+δ and 1−δ.';
+    $('dm-hi').textContent = hs ? 'CuInSe₂ (HSE06)' : cr ? 'CuInSe₂ (CRYSTAL)' : qe ? 'CuInSe₂ (QE)' : 'CuInSe₂ fit';
+    $('lk-box').hidden = ai; $('dend-row').hidden = ai; $('asr-row').hidden = !ai;
+    $('note-ai').hidden = !qe; $('note-cr').hidden = !cr; $('note-hs').hidden = !hs; $('note-kv').hidden = ai; $('corner-panel').hidden = !ai; $('check-det').hidden = !(cr||hs);
+    $('corner-title').textContent = 'Each ingredient on its own: the eight corners of the cube ('+(cr?'CRYSTAL, '+(state.kind==='BOTH'?'CH':kn)+' cell, ':hs?'HSE06, '+(state.kind==='BOTH'?'CH':kn)+' cell, ':'QE, ')+'ZnSe total = 1)';
+    $('corner-note').innerHTML = hs ? 'Corner (tensor, masses, forces) = (ZnSe or '+(state.kind==='BOTH'?'CH':kn)+', …). Both ends are HSE06 calculations in the same cell; the last row is the CuInSe₂ calculation itself, checked against <code>dynmat.x</code> below. Folded means weight outside the zinc-blende Γ subspace. The second table swaps the tensor of one species at a time (masses and forces of ZnSe).' : cr ? 'Corner (tensor, masses, forces) = (ZnSe or '+(state.kind==='BOTH'?'CH':kn)+', …). The last row is the CRYSTAL calculation itself; its lines are checked against the CRYSTAL output below. Folded means weight outside the zinc-blende Γ subspace. The second table swaps the tensor of one species at a time (masses and forces of ZnSe).' : 'These eight settings reproduce the eight <code>spec_*.dat</code> files you supplied to within 0.13 % of the peak height. Folded means weight outside the zinc-blende Γ subspace. The second table swaps the tensor of one species at a time (masses and forces of ZnSe).';
+    $('btn-ca').disabled = qe; $('btn-ca').style.opacity = qe ? .45 : 1; $('btn-both').disabled = qe; $('btn-both').style.opacity = qe ? .45 : 1; $('ca-note').hidden = !qe;
+    $('o-mass').textContent = state.mass.toFixed(2);
+    $('o-dmat').textContent = state.dmat.toFixed(2);
+    $('o-geom').textContent = state.geom.toFixed(2);
+    $('s-tens').value = state.tens; $('s-mass').value = state.mass; $('s-dmat').value = state.dmat; $('s-geom').value = state.geom;
+    $('geomBox').hidden = ai || state.link;
+    $('sel-shade').value = shadeMode(); $('sel-shade').disabled = !hasSp();
+    $('shk-row').hidden = !(state.kind==='BOTH' && shadeMode()!=='fold') && !(state.kind==='BOTH');
+    $('sel-shk').value = state.shadeK; $('c-end').checked = state.showEnd; sclSync();
+    $('vib-panel').hidden = !hasSp();
+    var sul = hs && HS_MAT==='S'; $('mat-row').hidden = !hs; $('mat-hint').hidden = true; $('disp-panel').hidden = true;
+    $('note-hs').hidden = !hs || sul; $('note-hs-s').hidden = !sul;
+  }
+  // Text localization for the sulfides: every visible text node outside .nol10n is rewritten while HS_MAT is 'S'.
+  var L10N_ORIG = new WeakMap();
+  function sulf(s){ return s.replace(/CuInSe₂/g,'CuInS₂').replace(/CuInSe2/g,'CuInS2').replace(/ZnSe/g,'ZnS').replace(/\bSe\b/g,'S'); }
+  function locNode(n){
+    if(n.nodeType===1){ if(n.closest && n.closest('.nol10n')) return; if(n.tagName==='SCRIPT'||n.tagName==='STYLE') return;
+      var w = document.createTreeWalker(n, NodeFilter.SHOW_TEXT, null), t; var list = []; while((t = w.nextNode())) list.push(t); list.forEach(locNode); return; }
+    if(n.nodeType!==3) return;
+    var p = n.parentElement; if(!p || p.closest('.nol10n') || p.tagName==='SCRIPT' || p.tagName==='STYLE') return;
+    var on = state.src==='HS' && HS_MAT==='S';
+    if(on){ var s = sulf(n.data); if(s!==n.data){ if(!L10N_ORIG.has(n)) L10N_ORIG.set(n, n.data); n.data = s; } }
+    else if(L10N_ORIG.has(n)){ n.data = L10N_ORIG.get(n); L10N_ORIG.delete(n); }
+  }
+  if(window.MutationObserver) new MutationObserver(function(ms){
+    if(!(state.src==='HS' && HS_MAT==='S')) return;
+    ms.forEach(function(mu){ if(mu.type==='characterData') locNode(mu.target); else mu.addedNodes.forEach(locNode); });
+  }).observe(document.body, {childList:true, subtree:true, characterData:true});
+  function setMaterial(x){
+    setHSMaterial(x); state.sel = {CH:null,CA:null}; state.scl = {};
+    document.querySelectorAll('#mat button').forEach(function(o){ o.setAttribute('aria-checked', o.getAttribute('data-mat')===x ? 'true':'false'); });
+    update(); locNode(document.body);
+  }
+  var cornerKey = '';
+  function checkTableHS(){
+    var k = state.kind==='CA' ? 'CA' : 'CH', lv = evaluateHS(k,{tens:1,mass:1,dmat:1,nobose:true}), ref = HSD[k].ref;
+    var top = 0, topP = 0; ref.forEach(function(r){ if(r[2]>top) top = r[2]; });
+    var near = function(f){ var b = null; lv.forEach(function(l){ if(Math.abs(l.f-f)<0.3 && (!b || Math.abs(l.f-f)<Math.abs(b.f-f))) b = l; }); return b; };
+    ref.forEach(function(r){ var b = near(r[0]); if(b && b.I>topP) topP = b.I; });
+    var rows = '<tr><th>Deg.</th><th>dynmat.x (cm⁻¹)</th><th>Page (cm⁻¹)</th><th>dynmat.x activity</th><th>Page activity</th></tr>';
+    ref.forEach(function(r){ var b = near(r[0]), pa = b ? 1000*b.I/topP : null;
+      rows += '<tr><td>'+r[1]+'</td><td>'+r[0].toFixed(2)+'</td><td>'+(b?b.f.toFixed(2):'–')+'</td><td>'+(1000*r[2]/top).toFixed(2)+'</td><td>'+(pa===null?'–':pa.toFixed(2))+'</td></tr>'; });
+    $('check').innerHTML = rows; $('check-k').textContent = k; $('check-src').textContent = 'dynmat.x output';
+    $('check-note').innerHTML = 'Raman activity 45α² + 7β² summed over each degenerate level, strongest line = 1000, no temperature factor. The reference is <code>dynmat.x</code> run on <code>CuIn'+HS_MAT+'2_'+(k==='CH'?'CH':'Au')+'.dyn</code> with the masses of the file; the page recomputes it from the same force constants and dχ/du tensors.';
+  }
+  function checkTable(){
+    var k = state.kind==='CA' ? 'CA' : 'CH';
+    $('check-src').textContent = 'CRYSTAL output'; $('check-note').innerHTML = 'I<sub>poly</sub> is the polycrystalline isotropic intensity, 45α² + 7β², in the CRYSTAL normalization (strongest line = 1000, no temperature factor). Frequencies and intensities come out of the reconstructed force constants and dχ/du tensors, so this table tests the reconstruction, not the physics.';
+    var D = CRD[k], lv = evaluateCR(k,{tens:1,mass:1,dmat:1,nobose:true}), rows = '<tr><th>Modes</th><th>Irrep</th><th>CRYSTAL (cm⁻¹)</th><th>Page (cm⁻¹)</th><th>CRYSTAL I<sub>poly</sub></th><th>Page I<sub>poly</sub></th></tr>';
+    var ks = Object.keys(D.poly).sort(function(a,b){return parseInt(a)-parseInt(b)});
+    ks.forEach(function(kk){
+      var ab = kk.split('-').map(Number), f = D.fC[ab[0]-1], best = null;
+      lv.forEach(function(l){ if(Math.abs(l.f-f)<0.3 && (!best || Math.abs(l.f-f)<Math.abs(best.f-f))) best = l; });
+      rows += '<tr><td>'+(ab[0]===ab[1]?ab[0]:ab[0]+'-'+ab[1])+'</td><td>'+D.irr[ab[0]-1]+'</td><td>'+f.toFixed(1)+'</td><td>'+(best?best.f.toFixed(1):'–')+'</td><td>'+D.poly[kk].toFixed(D.poly[kk]<10?2:1)+'</td><td>'+(best?best.I.toFixed(best.I<10?2:1):'–')+'</td></tr>';
+    });
+    $('check').innerHTML = rows; $('check-k').textContent = k;
+  }
+  function renderCorners(){
+    if(state.src==='KV') return;
+    var kc = state.kind==='CA' ? 'CA' : 'CH';
+    var key = state.src+HS_MAT+kc+'asr'+state.asr; if(key===cornerKey) return; cornerKey = key;
+    var cr = state.src==='CR', hs = state.src==='HS', kn = (cr||hs) ? kc : 'CH';
+    var E = function(r,m,d,rw){ return hs ? evaluateHS(kc,{tens:r, mass:m, dmat:d, rw:rw, asrR:state.asr}) : cr ? evaluateCR(kc,{tens:r, mass:m, dmat:d, rw:rw, asrR:state.asr}) : evaluateAI({tens:r, mass:m, dmat:d, rw:rw, asrR:state.asr}); };
+    var I0 = totalIntensity(E(0,0,0));
+    var lab = function(v,a,b){ return v? b : a; };
+    var mlab = cr ? 'In, Cu' : 'Cu, In';
+    var rows = '<tr><th>Tensor</th><th>Masses</th><th>Forces</th><th>Total</th><th>Folded</th><th>Strongest line</th></tr>';
+    [[0,0,0],[1,0,0],[0,1,0],[0,0,1],[0,1,1],[1,0,1],[1,1,0],[1,1,1]].forEach(function(c){
+      var lv = E(c[0],c[1],c[2]), top = lv.slice().sort(function(a,b){return b.I-a.I})[0];
+      rows += '<tr><td>'+lab(c[0],'ZnSe',kn)+'</td><td>'+lab(c[1],'Zn, Zn',mlab)+'</td><td>'+lab(c[2],'ZnSe',kn)+'</td><td>'+nf(totalIntensity(lv)/I0)+'</td><td>'+nf(foldedIntensity(lv)/I0)+'</td><td>'+top.f.toFixed(1)+' cm⁻¹</td></tr>';
+    });
+    $('corner').innerHTML = rows;
+    var ar = '<tr><th>Tensor from '+kn+' on…</th><th>Total</th><th>Folded</th></tr>';
+    var sp = cr ? [['In atoms only',[1,0,0]],['Cu atoms only',[0,1,0]],['In and Cu (both cations)',[1,1,0]],['Se atoms only',[0,0,1]],['all atoms',[1,1,1]]]
+                : [['Cu atoms only',[1,0,0]],['In atoms only',[0,1,0]],['Cu and In (both cations)',[1,1,0]],['Se atoms only',[0,0,1]],['all atoms',[1,1,1]]];
+    sp.forEach(function(p){
+      var lv = E(0,0,0,p[1]);
+      ar += '<tr><td>'+p[0]+'</td><td>'+nf(totalIntensity(lv)/I0)+'</td><td>'+nf(foldedIntensity(lv)/I0)+'</td></tr>';
+    });
+    $('atoms').innerHTML = ar;
+    if(cr) checkTable(); else if(hs) checkTableHS();
+  }
+  // ---- dispersion panel ----
+  var A0 = 5.667;
+  var PATHS = {
+    full:{pts:[[0,0,0],[0,0,1],[.5,0,1],[.75,0,.75],[0,0,0],[.5,.5,.5]], lab:['Γ','X','W','K','Γ','L']},
+    xz:{pts:[[0,0,0],[0,0,1]], lab:['Γ','X(z)']},
+    xx:{pts:[[0,0,0],[1,0,0]], lab:['Γ','X(x)']},
+    w:{pts:[[0,0,0],[1,0,.5]], lab:['Γ','W']},
+    l:{pts:[[0,0,0],[.5,.5,.5]], lab:['Γ','L']}
+  };
+  var dpath = 'full', dcache = {}, dTimer = 0, dRaf = 0;
+  function kpath(P, ns){
+    var ks = [], xs = [], ticks = [], x = 0;
+    for(var i=0;i<P.pts.length-1;i++){
+      var a = P.pts[i], b = P.pts[i+1], d = Math.hypot(b[0]-a[0], b[1]-a[1], b[2]-a[2]), n = Math.max(3, Math.round(ns*d/0.9));
+      ticks.push([x, P.lab[i]]);
+      for(var j=0;j<n;j++){ var t = j/n; ks.push([a[0]+t*(b[0]-a[0]), a[1]+t*(b[1]-a[1]), a[2]+t*(b[2]-a[2])]); xs.push(x+t*d); }
+      x += d;
+    }
+    var l = P.pts[P.pts.length-1]; ks.push(l.slice()); xs.push(x); ticks.push([x, P.lab[P.lab.length-1]]);
+    return {ks:ks, xs:xs, ticks:ticks, xmax:x};
+  }
+  function dbands(kind, o, kp, tag){
+    var key = [kind, tag, kp.ks.length, kind==='ZB' ? 0 : [o.mass.toFixed(3), o.dmat.toFixed(3), o.geom.toFixed(3)].join(',')].join('|');
+    if(!dcache[key]){
+      var c = ctrl(o), a = kind==='ZB' ? A0 : A0*(1+0.0203*o.geom);
+      dcache[key] = kp.ks.map(function(k){ return bandsAt(kind, c, k, a); });
+      var keys = Object.keys(dcache); if(keys.length>60) delete dcache[keys[0]];
+    }
+    return dcache[key];
+  }
+  function drawDisp(ns){
+    return;   // no dispersion panel in the SM version
+    var kp = kpath(PATHS[dpath], ns), tag = dpath+ns, o = state, ks = ['ZB','CH','CA'];
+    var B = {}; ks.forEach(function(k){ B[k] = dbands(k, o, kp, tag); });
+    var ymax = 0; ks.forEach(function(k){ B[k].forEach(function(bs){ bs.forEach(function(b){ if(b.f>ymax) ymax = b.f; }); }); });
+    ymax = Math.ceil(ymax*1.06/50)*50;
+    var W = 340, H = 300, m = {l:40, r:8, t:22, b:30}, pw = W-m.l-m.r, ph = H-m.t-m.b;
+    var X = function(v){ return m.l + v/kp.xmax*pw; }, Y = function(v){ return m.t + ph*(1-v/ymax); };
+    var ttl = {ZB:'ZnSe (ZB), 2 atoms', CH:'CH, 8 atoms', CA:'CA, 4 atoms'}, col = {ZB:'var(--ink-2)', CH:'var(--series-1)', CA:'var(--series-2)'};
+    var showF = $('c-dfold').checked, showG = $('c-dgam').checked, s = '';
+    var wsum = {CH:0, CA:0}, wn = {CH:0, CA:0};
+    ks.forEach(function(k){
+      var v = '<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Phonon dispersion of '+ttl[k]+'"><text x="'+m.l+'" y="14" class="axis-title" style="font-weight:600">'+ttl[k]+'</text><g class="axis">';
+      for(var t=0;t<=ymax;t+=50) v += '<line x1="'+m.l+'" x2="'+(W-m.r)+'" y1="'+Y(t)+'" y2="'+Y(t)+'" stroke="var(--line-soft)"/><text x="'+(m.l-5)+'" y="'+(Y(t)+4)+'" text-anchor="end">'+t+'</text>';
+      kp.ticks.forEach(function(tk){ v += '<line x1="'+X(tk[0])+'" x2="'+X(tk[0])+'" y1="'+m.t+'" y2="'+(m.t+ph)+'" stroke="var(--line)"/><text x="'+X(tk[0])+'" y="'+(m.t+ph+16)+'" text-anchor="middle">'+tk[1]+'</text>'; });
+      v += '<line x1="'+m.l+'" x2="'+(W-m.r)+'" y1="'+(m.t+ph)+'" y2="'+(m.t+ph)+'" stroke="var(--muted)"/></g>';
+      v += '<text class="axis-title" transform="translate(10 '+(m.t+ph/2)+') rotate(-90)" text-anchor="middle">ω (cm⁻¹)</text>';
+      var nb = B.ZB[0].length;
+      if(k==='ZB'){
+        for(var b=0;b<nb;b++){ var d = ''; B.ZB.forEach(function(bs,i){ d += (i?'L':'M')+X(kp.xs[i]).toFixed(1)+' '+Y(bs[b].f).toFixed(1); }); v += '<path d="'+d+'" fill="none" stroke="'+col.ZB+'" stroke-width="1.6"/>'; }
+      } else {
+        for(var b0=0;b0<nb;b0++){ var d0 = ''; B.ZB.forEach(function(bs,i){ d0 += (i?'L':'M')+X(kp.xs[i]).toFixed(1)+' '+Y(bs[b0].f).toFixed(1); }); v += '<path d="'+d0+'" fill="none" stroke="var(--ink-2)" stroke-opacity="0.35" stroke-width="1.2"/>'; }
+        B[k].forEach(function(bs,i){
+          bs.forEach(function(b){ wsum[k] += b.w*b.w; wn[k] += b.w; });
+          bs.forEach(function(b){
+            if(b.w<0.04 && !showF) return;
+            var w = Math.min(1, b.w);
+            v += '<circle cx="'+X(kp.xs[i]).toFixed(1)+'" cy="'+Y(b.f).toFixed(1)+'" r="'+(1.1+2.3*w).toFixed(2)+'" fill="'+col[k]+'" fill-opacity="'+(b.w<0.04 ? 0.22 : 0.3+0.7*w).toFixed(2)+'"/>';
+          });
+        });
+        if(showG && state.src!=='KV' && !(state.src==='AI' && k==='CA')){
+          var lv = ev(state, k); var xg = [0]; kp.ticks.forEach(function(tk){ if(tk[1]==='Γ' && tk[0]>0) xg.push(tk[0]); });
+          lv.forEach(function(l){ xg.forEach(function(x0){ v += '<circle cx="'+X(x0).toFixed(1)+'" cy="'+Y(l.f).toFixed(1)+'" r="3.4" fill="none" stroke="var(--ink)" stroke-width="1"/>'; }); });
+        }
+      }
+      host.dataset.ok = '1'; s += '<div class="dcell">'+v+'</svg></div>';
+    });
+    host.innerHTML = s;
+    $('d-chw').textContent = pc(wsum.CH/Math.max(wn.CH,1e-9)); $('d-caw').textContent = pc(wsum.CA/Math.max(wn.CA,1e-9));
+    $('d-g').textContent = 'CA: 2   CH: 6'; $('d-gk').textContent = 'ZB wavevectors that fold onto Γ (CA: Γ, X(z); CH: Γ, X(z), four W)';
+  }
+  function scheduleDisp(){
+    cancelAnimationFrame(dRaf); clearTimeout(dTimer);
+    dRaf = requestAnimationFrame(function(){ drawDisp(5); });
+    dTimer = setTimeout(function(){ drawDisp(18); }, 200);
+  }
+  $('sel-path').addEventListener('change', function(e){ dpath = e.target.value; scheduleDisp(); });
+  $('c-dfold').addEventListener('change', function(){ drawDisp(18); });
+  $('c-dgam').addEventListener('change', function(){ drawDisp(18); });
+
+  function update(){ if(state.link) state.geom = state.dmat; syncUI(); renderCorners(); draw(); scheduleDisp(); }
+
+  $('s-tens').addEventListener('input', function(e){ state.tens = +e.target.value; update(); });
+  $('s-mass').addEventListener('input', function(e){ state.mass = +e.target.value; update(); });
+  $('s-dmat').addEventListener('input', function(e){ state.dmat = +e.target.value; update(); });
+  $('s-geom').addEventListener('input', function(e){ state.geom = +e.target.value; update(); });
+  $('c-link').addEventListener('change', function(e){ state.link = e.target.checked; if(state.link) state.geom = state.dmat; update(); });
+  $('n-dend').addEventListener('input', function(e){ var v = +e.target.value; if(isFinite(v) && v>=0 && v<=0.6){ state.dEnd = v; update(); } });
+  $('n-gam').addEventListener('input', function(e){ var v = +e.target.value; if(isFinite(v) && v>=1 && v<=12){ state.gamma = v; update(); } });
+  $('sel-y').addEventListener('change', function(e){ state.yscale = e.target.value; update(); });
+  $('c-auto').addEventListener('change', function(e){ state.yauto = e.target.checked; update(); });
+  $('c-end').addEventListener('change', function(e){ state.showEnd = e.target.checked; update(); });
+  $('sel-shade').addEventListener('change', function(e){ state.shade = e.target.value; update(); });
+  $('sel-shk').addEventListener('change', function(e){ state.shadeK = e.target.value; update(); });
+  $('sel-view').addEventListener('change', function(e){ state.view = e.target.value; update(); });
+  function playUI(){ $('btn-play').textContent = state.play ? '❚❚ Pause' : '▶ Animate'; $('btn-play').setAttribute('aria-pressed', state.play ? 'true':'false'); }
+  $('btn-play').addEventListener('click', function(){ state.play = !state.play; playUI(); kick(); });
+  $('sel-speed').addEventListener('change', function(e){ state.speed = +e.target.value; });
+  $('c-fscale').addEventListener('change', function(e){ state.fscale = e.target.checked; kick(); });
+  $('c-spin').addEventListener('change', function(e){ state.spin = e.target.checked; kick(); });
+  $('c-lrot').addEventListener('change', function(e){ state.linkRot = e.target.checked; });
+  $('sel-view').addEventListener('change', function(e){ state.view = e.target.value; rot.CH = viewMat(state.view); rot.CA = viewMat(state.view); kick(); });
+  if(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) state.play = false;
+  playUI();
+  $('btn-strong').addEventListener('click', function(){ state.sel = {CH:null,CA:null}; update(); });
+  // spectrum scaling (display only)
+  function sclOptions(){
+    var ks = kinds(), both = ks.length>1, o = [['Z', both||state.src!=='AI' ? 'ZnSe' : 'ZnSe']];
+    ks.forEach(function(k){ o.push(['cur:'+k, (both?k+' ':'')+'current sliders']); if(state.showEnd) o.push(['end:'+k, (both?k+' ':'')+'all sliders at 1']); });
+    return o;
+  }
+  function sclSync(){
+    var sel = $('sel-scl'), cur = sel.value, o = sclOptions();
+    sel.innerHTML = o.map(function(x){ return '<option value="'+x[0]+'">'+x[1]+'</option>'; }).join('');
+    sel.value = o.some(function(x){ return x[0]===cur; }) ? cur : (o.length>1 ? o[1][0] : o[0][0]);
+    $('n-scl').value = sf(sel.value);
+  }
+  window.__sclSync = sclSync;
+  $('sel-scl').addEventListener('change', function(){ $('n-scl').value = sf($('sel-scl').value); });
+  $('n-scl').addEventListener('input', function(e){ var v = parseFloat(e.target.value); if(isFinite(v) && v>0){ state.scl[$('sel-scl').value] = v; draw(); } });
+  $('btn-scl').addEventListener('click', function(){ state.scl = {}; $('n-scl').value = 1; draw(); });
+  $('tbody').addEventListener('click', function(e){ var tr = e.target.closest('tr[data-f]'); if(tr){ state.sel[tr.getAttribute('data-k')] = +tr.getAttribute('data-f'); update(); try{ $('vib-panel').scrollIntoView({behavior:'smooth', block:'nearest'}); }catch(_){} } });
+  function setKindButtons(){ document.querySelectorAll('#kind button').forEach(function(o){ o.setAttribute('aria-checked', o.getAttribute('data-kind')===state.kind ? 'true':'false'); }); }
+  function setSource(src){
+    state.src = src;
+    document.querySelectorAll('#src button').forEach(function(o){ o.setAttribute('aria-checked', o.getAttribute('data-src')===src ? 'true':'false'); });
+    if(src==='AI' && state.kind!=='CH'){ state.kind = 'CH'; setKindButtons(); }
+    state.yscale = src==='KV' ? 'lin' : 'sqrt'; $('sel-y').value = state.yscale;
+    state.sel = {CH:null,CA:null}; update(); locNode(document.body);
+  }
+  document.querySelectorAll('#mat button').forEach(function(b){ b.addEventListener('click', function(){ setMaterial(b.getAttribute('data-mat')); }); });
+  document.querySelectorAll('#src button').forEach(function(b){ b.addEventListener('click', function(){ setSource(b.getAttribute('data-src')); }); });
+  $('c-asr').addEventListener('change', function(e){ state.asr = e.target.checked; update(); });
+  document.querySelectorAll('#kind button').forEach(function(b){
+    b.addEventListener('click', function(){
+      if(b.disabled) return;
+      state.kind = b.getAttribute('data-kind'); state.sel = {CH:null,CA:null};
+      setKindButtons(); update();
+    });
+  });
+  document.querySelectorAll('.presets button').forEach(function(b){
+    b.addEventListener('click', function(){
+      var p = b.getAttribute('data-p');
+      state.tens = (p==='tens'||p==='all') ? 1 : 0;
+      state.mass = (p==='mass'||p==='all') ? 1 : 0;
+      state.dmat = (p==='dmat'||p==='all') ? 1 : 0;
+      state.geom = state.dmat; state.link = true; $('c-link').checked = true;
+      update();
+    });
+  });
+  // xmgrace export through the downloads capability
+  var dl = null, st = $('agr-status');
+  $('btn-agr').hidden = true;
+  try{
+    if(window.claude && window.claude.use){ window.claude.use('downloads').then(function(d){ dl = d; if(d) $('btn-agr').hidden = false; }, function(){}); }
+  }catch(e){}
+  $('btn-agr').addEventListener('click', function(){
+    if(!dl) return; st.textContent = '';
+    var sul = state.src==='HS' && HS_MAT==='S', name = 'raman_'+state.src.toLowerCase()+(sul?'_S':'')+'_'+(state.kind==='BOTH'?'CH_CA':state.kind)+'_t'+state.tens.toFixed(2)+'_m'+state.mass.toFixed(2)+'_d'+state.dmat.toFixed(2)+'.agr.txt';
+    dl.save({filename:name, data:sul ? sulf(agr()) : agr()}).then(function(){ st.textContent = 'Saved. Remove the .txt suffix to open it with xmgrace.'; }, function(e){ st.textContent = (e && e.code==='declined') ? 'Save cancelled.' : 'Could not save here ('+(e && e.code || 'error')+').'; });
+  });
+  if(window.ResizeObserver){ var last = 0; new ResizeObserver(function(){ var w = $('chart').clientWidth; if(Math.abs(w-last)>1){ last = w; draw(); } }).observe($('chart')); }
+  state.tens = 0.5; state.mass = 0.5; state.dmat = 0.5;
+  $('sel-y').value = state.yscale;
+  update();
+})();
+</script>
