@@ -38,3 +38,9 @@ of a path is computed slightly off Γ (1e-4 · 2π/a) along its own segment, so 
 limit of its own direction. The field `marked_modes` lists the modes marked with circles in the dispersions of the
 supercell viewer: the anion-only modes at X and W of the parents, which fold onto the A₁ Raman modes of the CA and CH
 cells, and the A₁ Raman modes themselves.
+
+## Licence
+
+The contents of this repository are licensed under the
+[Creative Commons Attribution 4.0 International licence (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/);
+see `LICENSE`. If you use these data or tools, please cite the article above.
