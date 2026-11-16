@@ -106,6 +106,7 @@ canvas.mcv:active { cursor: grabbing; }
 .mctl label { display: flex; gap: 8px; align-items: center; color: var(--muted); }
 .mctl input[type=range] { width: 150px; }
 .mpw { margin-top: 14px; display: flex; flex-direction: column; gap: 6px; }
+.mpw[hidden] { display: none; }
 a.btnlink { align-self: flex-start; font-size: 13px; color: var(--panel); background: var(--focus); border-radius: 6px; padding: 6px 12px; text-decoration: none; }
 a.btnlink:hover { filter: brightness(1.08); }
 </style>
@@ -273,9 +274,9 @@ a.btnlink:hover { filter: brightness(1.08); }
             <button type="button" class="seg" data-rep="2" aria-pressed="true">medium</button>
             <button type="button" class="seg" data-rep="3" aria-pressed="false">large</button>
           </div>
-          <label class="chk"><input type="checkbox" id="mArrows"> Velocity arrows</label>
+          <label class="chk"><input type="checkbox" id="mArrows" checked> Velocity arrows</label>
         </div>
-        <div class="mpw">
+        <div class="mpw" id="mPWbox" hidden>
           <a id="mPW" class="btnlink" href="https://henriquemiranda.github.io/phononwebsite/phonon.html" target="_blank" rel="noopener">Open in the phonon website ↗</a>
           <p class="hint" id="mPWnote"></p>
         </div>
@@ -796,7 +797,7 @@ a.btnlink:hover { filter: brightness(1.08); }
       document.dispatchEvent(new CustomEvent('phonon-pick', { detail: window.__phononPick }));
     });
     // selected mode: ring at its point
-    const sel = el('circle', { r: 5.5, class: 'dsel', style: 'fill:none;stroke:var(--ink);stroke-width:2;display:none;pointer-events:none' }, svg);
+    const sel = el('circle', { r: 5.5, class: 'dsel', style: 'fill:#ff6b6b;fill-opacity:.85;stroke:#c0392b;stroke-width:.8;display:none;pointer-events:none' }, svg);   // selected (animated) mode
     const showSel = p => { const k = p && p.key; const mine = k === o.key || (o.grey && k === o.greyKey);
       if (!mine) { sel.style.display = 'none'; return; }
       sel.setAttribute('cx', X(d.x[p.i])); sel.setAttribute('cy', Y(p.f)); sel.style.display = ''; };
@@ -885,7 +886,7 @@ a.btnlink:hover { filter: brightness(1.08); }
     return (cache[key] = Object.assign({ V: a, nm: 3 * m.nat }, m));
   }
   const cv = document.getElementById('mCv'), ctx = cv.getContext('2d');
-  const st = { key: null, i: 0, n: 0, rep: 2, amp: 0.35, speed: 1, arrows: false, play: !matchMedia('(prefers-reduced-motion: reduce)').matches, t: 0 };
+  const st = { key: null, i: 0, n: 0, rep: 2, amp: 0.35, speed: 1, arrows: true, play: !matchMedia('(prefers-reduced-motion: reduce)').matches, t: 0 };
   let R = null;           // rotation matrix (rows: screen x, screen y, depth)
   let geo = null;         // supercell for the current dataset and repetition
   const sub = (a, b) => [a[0]-b[0], a[1]-b[1], a[2]-b[2]];
@@ -947,11 +948,20 @@ a.btnlink:hover { filter: brightness(1.08); }
     return u;
   }
 
+  const PROMPT = 'Click somewhere in one of the dispersions above to start the animation.';
   function draw() {
-    if (!st.key) return;
     const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
     if (cv.width !== Math.round(W*dpr) || cv.height !== Math.round(H*dpr)) { cv.width = Math.round(W*dpr); cv.height = Math.round(H*dpr); }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
+    if (!st.key) {   // nothing selected yet: prompt in the empty canvas
+      const css0 = getComputedStyle(document.documentElement);
+      ctx.fillStyle = css0.getPropertyValue('--muted').trim() || '#777'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = `15px ${css0.getPropertyValue('--font-body').trim() || 'sans-serif'}`;
+      const words = PROMPT.split(' '), lines = [''];
+      for (const w of words) { const t = (lines[lines.length-1] + ' ' + w).trim(); if (ctx.measureText(t).width > W - 40 && lines[lines.length-1]) lines.push(w); else lines[lines.length-1] = t; }
+      lines.forEach((l, k) => ctx.fillText(l, W/2, H/2 + (k - (lines.length-1)/2) * 21));
+      return;
+    }
     const css = getComputedStyle(document.documentElement), ink = css.getPropertyValue('--ink').trim(), bondc = css.getPropertyValue('--bond').trim() || '#8a8f93';
     const S = Math.min(W, H) / geo.size * 1.05, m = data(st.key);
     const P = r => { const d = sub(r, geo.c); return [W/2 + S*(R[0][0]*d[0] + R[0][1]*d[1] + R[0][2]*d[2]), H/2 - S*(R[1][0]*d[0] + R[1][1]*d[1] + R[1][2]*d[2]), R[2][0]*d[0] + R[2][1]*d[1] + R[2][2]*d[2]]; };
@@ -1025,8 +1035,8 @@ a.btnlink:hover { filter: brightness(1.08); }
     document.getElementById('mTitle').innerHTML = `· ${pretty(comp)}${p.key.endsWith('prim') ? '' : p.key.endsWith('CH') ? ' (CH)' : ' (CA)'}`;
     document.getElementById('mFreq').textContent = `${f[n].toFixed(1)} cm⁻¹`;
     document.getElementById('mQ').innerHTML = qLabel(p);
-    document.getElementById('mHow').innerHTML = (p.first ? `Shown on opening: the A<sub>1</sub> Raman mode of chalcopyrite CuInSe<sub>2</sub> (○ in panel CH). ` : '')
-      + 'Click any point of any phonon dispersion above to animate that mode. Drag the crystal to rotate it, double-click to reset the view.';
+    document.getElementById('mHow').textContent = 'Click another point of a dispersion above to animate that mode (red dot). Drag the crystal to rotate it, double-click to reset the view.';
+    document.getElementById('mPWbox').hidden = false; cv.setAttribute('aria-label', 'Animated phonon mode; drag to rotate');
     document.getElementById('mN').textContent = `${n + 1} of ${m.nm} (ascending frequency)`;
     // share of the displacement amplitude per species (not mass-weighted)
     const w = {}; let tot = 0;
@@ -1063,11 +1073,8 @@ a.btnlink:hover { filter: brightness(1.08); }
   cv.addEventListener('dblclick', () => { R = VIEW0(); });
 
   document.addEventListener('phonon-pick', e => { show(e.detail); document.getElementById('mCard').scrollIntoView({ block: 'nearest', behavior: 'smooth' }); });
-  // start with the A1 Raman mode of chalcopyrite CuInSe2 (first Gamma point of the path)
-  const k0 = 'CuInSe2_CH', d0 = window.__DISP[k0];
-  window.__phononPick = { key: k0, i: 0, f: window.__DISP.A1[k0], tx: d0.tx, tl: d0.tl, x: d0.x, name: 'CuInSe2' };
-  show(Object.assign({ first: true }, window.__phononPick));
-  document.dispatchEvent(new CustomEvent('phonon-pick-init'));
+  // nothing is shown until a mode is picked in one of the dispersions
+  cv.setAttribute('aria-label', PROMPT);
   requestAnimationFrame(tick);
 })();
 </script>
