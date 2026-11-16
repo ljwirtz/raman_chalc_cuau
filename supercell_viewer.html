@@ -807,13 +807,20 @@ a.btnlink:hover { filter: brightness(1.08); }
     svg.addEventListener('pointerleave', hide);
     svg.addEventListener('pointermove', e => {
       const r = svg.getBoundingClientRect(), px = (e.clientX - r.left) / r.width * W, py = (e.clientY - r.top) / r.height * H;
-      if (px < m.l || px > m.l + pw || py < m.t || py > m.t + ph) { hide(); last = null; return; }
-      const xv = x0 + (px - m.l) / pw * (x1 - x0), fy = (1 - (py - m.t) / ph) * o.ymax;
+      if (px < m.l - 9 || px > m.l + pw + 9 || py < m.t - 9 || py > m.t + ph + 9) { hide(); last = null; return; }   // a margin for the symbols on the frame
+      const xv = x0 + (Math.min(Math.max(px, m.l), m.l + pw) - m.l) / pw * (x1 - x0), fy = (1 - (Math.min(Math.max(py, m.t), m.t + ph) - m.t) / ph) * o.ymax;
       let i = 0, best = 1e9; d.x.forEach((v, k) => { if (Math.abs(v - xv) < best) { best = Math.abs(v - xv); i = k; } });
       if (i + 1 < d.x.length && d.x[i + 1] === d.x[i] && xv > d.x[i]) i++;   // right of an interior Γ: its second copy (limit along the outgoing direction)
       let nb = null, nbd = 1e9, src = '', key = o.key;
       d.f[i].forEach(v => { if (Math.abs(v - fy) < nbd) { nbd = Math.abs(v - fy); nb = v; src = o.name; key = o.key; } });
       if (o.grey && o.grey.f[i]) o.grey.f[i].forEach(v => { if (Math.abs(v - fy) < nbd) { nbd = Math.abs(v - fy); nb = v; src = o.greyName; key = o.greyKey; } });
+      // snap to the A1 Raman mode (white circle) when the pointer is within ~9 units of it
+      if (o.a1) d.tl.forEach((l, k) => {
+        if (l !== 'Γ' || Math.abs(X(d.tx[k]) - px) > 9 || Math.abs(Y(o.a1) - py) > 9) return;
+        let j = d.x.findIndex(v => Math.abs(v - d.tx[k]) < 1e-9);
+        if (j + 1 < d.x.length && d.x[j + 1] === d.x[j] && px > X(d.x[j])) j++;
+        i = j; nb = d.f[i].reduce((b, v) => Math.abs(v - o.a1) < Math.abs(b - o.a1) ? v : b); src = o.name; key = o.key;
+      });
       last = { key, i, f: nb, name: src };
       // nearest labelled point
       let lab = '', ld = 1e9; d.tx.forEach((t, k) => { if (Math.abs(t - d.x[i]) < ld) { ld = Math.abs(t - d.x[i]); lab = d.tl[k]; } });
@@ -949,28 +956,44 @@ a.btnlink:hover { filter: brightness(1.08); }
   }
 
   const PROMPT = 'Click somewhere in one of the dispersions above to start the animation.';
+  // shaded background of the empty panel: the A1 Raman mode of chalcopyrite CuInSe2, at rest, with its velocity arrows
+  const GHOST = { key: 'CuInSe2_CH', i: 0, n: null, geo: null };
   function draw() {
     const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
     if (cv.width !== Math.round(W*dpr) || cv.height !== Math.round(H*dpr)) { cv.width = Math.round(W*dpr); cv.height = Math.round(H*dpr); }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
-    if (!st.key) {   // nothing selected yet: prompt in the empty canvas
-      const css0 = getComputedStyle(document.documentElement);
-      ctx.fillStyle = css0.getPropertyValue('--muted').trim() || '#777'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.font = `15px ${css0.getPropertyValue('--font-body').trim() || 'sans-serif'}`;
-      const words = PROMPT.split(' '), lines = [''];
-      for (const w of words) { const t = (lines[lines.length-1] + ' ' + w).trim(); if (ctx.measureText(t).width > W - 40 && lines[lines.length-1]) lines.push(w); else lines[lines.length-1] = t; }
-      lines.forEach((l, k) => ctx.fillText(l, W/2, H/2 + (k - (lines.length-1)/2) * 21));
-      return;
-    }
+    if (st.key) { render(W, H, 2 * Math.PI * st.t, 1, st.arrows); return; }
+    // nothing selected yet: shaded static A1 mode, prompt on top
+    const css0 = getComputedStyle(document.documentElement);
+    if (GHOST.n === null) { const f = data(GHOST.key).f[0], a1 = window.__DISP.A1[GHOST.key]; GHOST.n = f.reduce((b, v, j) => Math.abs(v - a1) < Math.abs(f[b] - a1) ? j : b, 0); }
+    const keep = { key: st.key, i: st.i, n: st.n, geo };
+    Object.assign(st, { key: GHOST.key, i: GHOST.i, n: GHOST.n });
+    if (!GHOST.geo) { build(); GHOST.geo = geo; }
+    geo = GHOST.geo;
+    render(W, H, Math.PI / 2, 0.28, true);     // phase pi/2: atoms at rest, velocity arrows at their longest
+    Object.assign(st, { key: keep.key, i: keep.i, n: keep.n }); geo = keep.geo;
+    ctx.font = `15px ${css0.getPropertyValue('--font-body').trim() || 'sans-serif'}`;
+    const words = PROMPT.split(' '), lines = [''];
+    for (const w of words) { const t = (lines[lines.length-1] + ' ' + w).trim(); if (ctx.measureText(t).width > W - 60 && lines[lines.length-1]) lines.push(w); else lines[lines.length-1] = t; }
+    const tw = Math.max(...lines.map(l => ctx.measureText(l).width)) + 28, th = lines.length * 21 + 18;
+    ctx.globalAlpha = 0.9; ctx.fillStyle = css0.getPropertyValue('--panel').trim() || '#fff';
+    ctx.beginPath(); ctx.roundRect ? ctx.roundRect(W/2 - tw/2, H/2 - th/2, tw, th, 8) : ctx.rect(W/2 - tw/2, H/2 - th/2, tw, th); ctx.fill();
+    ctx.globalAlpha = 1; ctx.fillStyle = css0.getPropertyValue('--ink').trim() || '#222'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    lines.forEach((l, k) => ctx.fillText(l, W/2, H/2 + (k - (lines.length-1)/2) * 21));
+    ctx.font = `12px ${css0.getPropertyValue('--font-body').trim() || 'sans-serif'}`; ctx.fillStyle = css0.getPropertyValue('--muted').trim() || '#777';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+    ctx.fillText('Shown: A₁ mode of CH CuInSe₂', 10, H - 8);
+  }
+
+  function render(W, H, phase, alpha, arrows) {
     const css = getComputedStyle(document.documentElement), ink = css.getPropertyValue('--ink').trim(), bondc = css.getPropertyValue('--bond').trim() || '#8a8f93';
     const S = Math.min(W, H) / geo.size * 1.05, m = data(st.key);
     const P = r => { const d = sub(r, geo.c); return [W/2 + S*(R[0][0]*d[0] + R[0][1]*d[1] + R[0][2]*d[2]), H/2 - S*(R[1][0]*d[0] + R[1][1]*d[1] + R[1][2]*d[2]), R[2][0]*d[0] + R[2][1]*d[1] + R[2][2]*d[2]]; };
-    const phase = 2 * Math.PI * st.t;
     const pos = geo.at.map(o => { const u = disp(o, phase); return P([0,1,2].map(x => o.r[x] + st.amp * u[x])); });
     ctx.lineCap = 'round';
-    ctx.strokeStyle = bondc; ctx.lineWidth = 2.2; ctx.globalAlpha = 0.75;
+    ctx.strokeStyle = bondc; ctx.lineWidth = 2.2; ctx.globalAlpha = 0.75 * alpha;
     ctx.beginPath(); geo.bonds.forEach(([i, j]) => { ctx.moveTo(pos[i][0], pos[i][1]); ctx.lineTo(pos[j][0], pos[j][1]); }); ctx.stroke();
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha = alpha;
     const order = geo.at.map((o, i) => i).sort((i, j) => pos[i][2] - pos[j][2]);
     for (const i of order) {
       const o = geo.at[i], [col, rad] = ATOM[m.typ[o.a]] || ['#999', .5], r = rad * S * 0.55, p = pos[i];
@@ -978,7 +1001,7 @@ a.btnlink:hover { filter: brightness(1.08); }
       g.addColorStop(0, '#ffffff'); g.addColorStop(0.35, col); g.addColorStop(1, col);
       ctx.fillStyle = g; ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.lineWidth = 0.8;
       ctx.beginPath(); ctx.arc(p[0], p[1], r, 0, 2*Math.PI); ctx.fill(); ctx.stroke();
-      if (st.arrows) {
+      if (arrows) {
         // velocity of the atom at this instant: longest when it passes its rest position, zero at the turning points
         const u = disp(o, phase, true), e = P([0,1,2].map(x => o.r[x] + 1.4 * u[x])), b = P(o.r);
         const dx = e[0] - b[0], dy = e[1] - b[1], L = Math.hypot(dx, dy);
@@ -990,6 +1013,7 @@ a.btnlink:hover { filter: brightness(1.08); }
         }
       }
     }
+    ctx.globalAlpha = 1;
   }
 
   let tPrev = null;
@@ -1051,6 +1075,7 @@ a.btnlink:hover { filter: brightness(1.08); }
   function setRep(n, rebuild = true) {
     st.rep = n;
     document.querySelectorAll('#mCard [data-rep]').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.rep === n)));
+    GHOST.geo = null;
     if (rebuild && st.key) build();
   }
   document.querySelectorAll('#mCard [data-rep]').forEach(b => b.onclick = () => setRep(+b.dataset.rep));
