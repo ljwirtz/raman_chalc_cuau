@@ -5,7 +5,12 @@ zinc-blende- and wurtzite-derived ternary semiconductors*.
 
 ## Web applications
 
-Both pages are self-contained HTML files: download them and open them in any web browser (no installation, no server).
+Both pages run directly in the browser:
+
+- **[Open the Zone-Folding Raman Explorer](https://ljwirtz.github.io/raman_chalc_cuau/zone_folding_explorer.html)**
+- **[Open the supercell viewer](https://ljwirtz.github.io/raman_chalc_cuau/supercell_viewer.html)**
+
+They are self-contained HTML files, so they can also be downloaded and opened locally in any web browser (no installation, no server). Clicking an `.html` file in the file list above shows its source code, not the page.
 
 | File | Content |
 |---|---|
