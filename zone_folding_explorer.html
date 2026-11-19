@@ -5,19 +5,19 @@
 /* Layout: one column, controls above a single spectrum panel, stats and a mode table beneath. Instrument-panel feel: slate neutrals, blue = current, orange = endpoint. */
 :root{
   --bg:#f3f5f7; --surface:#ffffff; --ink:#12181d; --ink-2:#465360; --muted:#6f7c88; --line:#dde3e8; --line-soft:#eaeef1;
-  --series-1:#2a78d6; --series-2:#eb6834; --series-3:#1baf7a; --ref:#465360; --focus:#2a78d6; --sp-in:#8e6bd0; --sp-cu:#e0a12b; --sp-se:#1baf7a;
+  --series-1:#2a78d6; --series-2:#eb6834; --series-3:#1baf7a; --ref:#465360; --focus:#2a78d6; --sp-in:#2a9d8f; --sp-cu:#b5651d; --sp-se:#c49a1c; --sp-s:#f2d22e;
   --font-ui:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
   --font-num:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
     --bg:#0f1418; --surface:#171d22; --ink:#eef2f5; --ink-2:#b3bec8; --muted:#8894a0; --line:#2a333b; --line-soft:#212a31;
-    --series-1:#3987e5; --series-2:#d95926; --series-3:#199e70; --ref:#b3bec8; --focus:#6aa6ee; --sp-in:#9a80da; --sp-cu:#d49a30; --sp-se:#1fa878; color-scheme:dark;
+    --series-1:#3987e5; --series-2:#d95926; --series-3:#199e70; --ref:#b3bec8; --focus:#6aa6ee; --sp-in:#2a9d8f; --sp-cu:#b5651d; --sp-se:#c49a1c; --sp-s:#f2d22e; color-scheme:dark;
   }
 }
 :root[data-theme="dark"]{
   --bg:#0f1418; --surface:#171d22; --ink:#eef2f5; --ink-2:#b3bec8; --muted:#8894a0; --line:#2a333b; --line-soft:#212a31;
-  --series-1:#3987e5; --series-2:#d95926; --series-3:#199e70; --ref:#b3bec8; --focus:#6aa6ee; --sp-in:#9a80da; --sp-cu:#d49a30; --sp-se:#1fa878; color-scheme:dark;
+  --series-1:#3987e5; --series-2:#d95926; --series-3:#199e70; --ref:#b3bec8; --focus:#6aa6ee; --sp-in:#2a9d8f; --sp-cu:#b5651d; --sp-se:#c49a1c; --sp-s:#f2d22e; color-scheme:dark;
 }
 *{box-sizing:border-box}
 [hidden]{display:none!important}
@@ -95,6 +95,7 @@ tbody tr[data-f]{cursor:pointer}
 caption{text-align:left;font-weight:600;padding:6px 0;color:var(--ink-2)}
 .spb{margin-top:10px}
 .tools{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center}
+.rng{display:flex;gap:6px;align-items:center}.rng input{width:96px}
 .btn{font:inherit;font-size:.85rem;padding:5px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);cursor:pointer}
 .btn:hover{border-color:var(--muted)}
 .dgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:8px}
@@ -221,12 +222,16 @@ caption{text-align:left;font-weight:600;padding:6px 0;color:var(--ink-2)}
   <section class="panel" id="vib-panel">
     <div class="tools" style="justify-content:space-between">
       <h2 style="margin:0;font-size:1rem">Where the picked line comes from</h2>
-      <div class="tools"><label for="sel-view" class="k">View</label><select id="sel-view"><option value="obl">oblique</option><option value="y">side, x–z plane</option><option value="x">side, y–z plane</option><option value="z">top, x–y plane</option></select>
+      <div class="tools"><span class="k">View</span><button type="button" class="btn" data-vv="obl">oblique</button><button type="button" class="btn" data-vv="001">along [001]</button><button type="button" class="btn" data-vv="100">along [100]</button><button type="button" class="btn" data-vv="110">along [110]</button>
       <button type="button" class="btn" id="btn-play" aria-pressed="true">❚❚ Pause</button>
-      <label for="sel-speed" class="k">Speed</label><select id="sel-speed"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option></select>
-      <label class="chk k" for="c-fscale" style="align-items:center"><input type="checkbox" id="c-fscale" checked style="margin:0"> rate ∝ line frequency</label>
+      <label class="rng k">Amplitude <input type="range" id="rng-amp" min="0.05" max="0.8" step="0.01" value="0.6"></label>
+      <label class="rng k">Speed <input type="range" id="rng-speed" min="0.2" max="2" step="0.05" value="1"></label>
+      <label class="chk k" for="c-arrows" style="align-items:center"><input type="checkbox" id="c-arrows" checked style="margin:0"> velocity arrows</label>
+      <label class="rng k">Arrow length <input type="range" id="rng-arrow" min="0.25" max="3" step="0.05" value="1"></label>
+      <label class="chk k" for="c-fscale" style="align-items:center"><input type="checkbox" id="c-fscale" checked style="margin:0"> oscillation rate ∝ phonon frequency</label>
       <label class="chk k" for="c-spin" style="align-items:center"><input type="checkbox" id="c-spin" style="margin:0"> spin</label>
       <label class="chk k" for="c-lrot" style="align-items:center"><input type="checkbox" id="c-lrot" checked style="margin:0"> link rotations</label>
+      <label class="chk k" for="c-cacube" id="lab-cacube" style="align-items:center" hidden><input type="checkbox" id="c-cacube" checked style="margin:0"> CA in the CH cell (a₀ × a₀ × 2a₀)</label>
       <button type="button" class="btn" id="btn-strong">Strongest line</button></div>
     </div>
     <p class="k" style="margin:4px 0 0">Drag the structure to rotate it. Click the spectrum or any row of the mode table, also those with zero weight, to pick a line. Only atoms that move can contribute, so the strongest line (A₁, Se breathing) is 100 % Se in both rows; pick a weaker line to see the cation share. Ball colors match the shading.</p>
@@ -855,13 +860,15 @@ if (typeof module !== 'undefined') module.exports = { bandsAt, eigSym, hessQ, di
 (function(){
   var $ = function(id){return document.getElementById(id)};
   var state = {src:'HS', asr:false, kind:'CH', tens:0, mass:0, dmat:0, geom:0, link:true, dEnd:0.30, gamma:4, yauto:false, yscale:'sqrt',
-               shade:'species', shadeK:'CH', sel:{CH:null,CA:null}, view:'obl', showEnd:true, play:true, speed:1, fscale:true, spin:false, linkRot:true, scl:{}};
+               shade:'species', shadeK:'CH', sel:{CH:null,CA:null}, view:'obl', showEnd:true, play:true, speed:1, caCube:true, amp:0.6, arrows:true, arrowScale:1, fscale:true, spin:false, linkRot:true, scl:{}};
   var anim = {panels:[], t0:0, phase:0.6, last:0, raf:0};
   var caches = {CH:{}, CA:{}};
   var refMemo = {};
   var lastLayout = null;
   var SPN = {HS:['Cu','In','Se'], CR:['In','Cu','Se'], AI:['Cu','In','Se'], KV:['Cu','In','Se']};      // species of type index 0,1,2 per engine
-  var SPC = {In:'var(--sp-in)', Cu:'var(--sp-cu)', Se:'var(--sp-se)'};
+  var SPC = {In:'var(--sp-in)', Cu:'var(--sp-cu)'};
+  function sulfMode(){ return state.src==='HS' && HS_MAT==='S'; }
+  Object.defineProperty(SPC, 'Se', {get:function(){ return sulfMode() ? 'var(--sp-s)' : 'var(--sp-se)'; }});   // anion site: S yellow in the sulfide mode
   var KC = {CH:'var(--series-1)', CA:'var(--series-2)'};
 
   function fmt(v){ return v>=10? v.toFixed(1): v>=1? v.toFixed(2): v>=0.1? v.toFixed(3): v.toFixed(4); }
@@ -1125,17 +1132,21 @@ if (typeof module !== 'undefined') module.exports = { bandsAt, eigSym, hessQ, di
   function Rxm(a){ var c=Math.cos(a), s=Math.sin(a); return [1,0,0, 0,c,-s, 0,s,c]; }
   function Rym(a){ var c=Math.cos(a), s=Math.sin(a); return [c,0,s, 0,1,0, -s,0,c]; }
   var BASE = {y:[1,0,0, 0,0,1, 0,-1,0], x:[0,1,0, 0,0,1, 1,0,0], z:[1,0,0, 0,1,0, 0,0,1]};   // world -> screen (x right, y up, z toward the viewer)
-  function viewMat(n){ return n==='obl' ? mmul(Rxm(0.45), mmul(Rym(0.6), BASE.y)) : BASE[n].slice(); }
+  // viewing directions in the cubic frame of the ZB parent, as in the supercell viewer
+  var S2 = Math.SQRT1_2, VV = {'001':BASE.z, '100':BASE.x, '110':[-S2,S2,0, 0,0,1, S2,S2,0]};
+  function viewMat(n){ return n==='obl' ? mmul(Rxm(0.45), mmul(Rym(0.6), BASE.y)) : (VV[n] || BASE[n]).slice(); }
+  // the CA cell is stored with its own axes (a along the cubic [110], b along [-110]); this turns it into the cubic frame
+  var Q45 = [S2,-S2,0, S2,S2,0, 0,0,1];
   var rot = {CH:viewMat('obl'), CA:viewMat('obl')}, vscenes = [], cols = null, frameN = 0;
   function cssv(n){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim() || '#888'; }
-  function getCols(){ return {ink:cssv('--ink'), muted:cssv('--muted'), line:cssv('--line'), surface:cssv('--surface'), sp:{In:cssv('--sp-in'), Cu:cssv('--sp-cu'), Se:cssv('--sp-se')}}; }
+  function getCols(){ return {bond:'#8a8f93', ink:cssv('--ink'), muted:cssv('--muted'), line:cssv('--line'), surface:cssv('--surface'), sp:{In:cssv('--sp-in'), Cu:cssv('--sp-cu'), Se:cssv(sulfMode() ? '--sp-s' : '--sp-se')}, mat:HS_MAT}; }
   function rotateBy(k, dx, dy){
     var M = mmul(Rxm(dy), Rym(dx));
     (state.linkRot ? ['CH','CA'] : [k]).forEach(function(q){ rot[q] = mmul(M, rot[q]); });
   }
   var EDGES = [[0,1],[2,3],[4,5],[6,7],[0,2],[1,3],[4,6],[5,7],[0,4],[1,5],[2,6],[3,7]];
   function paint(P, phase){
-    var ctx = P.ctx, W = P.W, H = P.H, R = rot[P.k], S = P.S, C = cols;
+    var ctx = P.ctx, W = P.W, H = P.H, R = P.caFrame ? mmul(rot[P.k], Q45) : rot[P.k], S = P.S, C = cols;
     ctx.clearRect(0,0,W,H);
     var rate = state.fscale ? P.f/180 : 1, ph = phase*rate, sn = Math.sin(ph), c0 = Math.cos(ph), cs = c0>=0 ? Math.max(c0,0.3) : Math.min(c0,-0.3);
     var pj = function(v){ return [R[0]*v[0]+R[1]*v[1]+R[2]*v[2], R[3]*v[0]+R[4]*v[1]+R[5]*v[2], R[6]*v[0]+R[7]*v[1]+R[8]*v[2]]; };
@@ -1143,7 +1154,7 @@ if (typeof module !== 'undefined') module.exports = { bandsAt, eigSym, hessQ, di
     ctx.lineWidth = 1; ctx.strokeStyle = C.line; ctx.setLineDash([4,3]);
     EDGES.forEach(function(e){ var a = pj(P.corners[e[0]]), b = pj(P.corners[e[1]]); ctx.beginPath(); ctx.moveTo(X(a),Y(a)); ctx.lineTo(X(b),Y(b)); ctx.stroke(); });
     ctx.setLineDash([]);
-    var amp = 0.6, arr = 1.8;
+    var amp = state.amp, arr = 1.8*state.arrowScale;
     var pts = P.atoms.map(function(A){
       return {A:A, q0:pj(A.p), q:pj([A.p[0]+A.u[0]*amp*sn, A.p[1]+A.u[1]*amp*sn, A.p[2]+A.u[2]*amp*sn]), va:pj([A.u[0]*arr*cs, A.u[1]*arr*cs, A.u[2]*arr*cs])};
     });
@@ -1155,17 +1166,17 @@ if (typeof module !== 'undefined') module.exports = { bandsAt, eigSym, hessQ, di
     prims.forEach(function(pr){
       if(pr.b){
         var a = pts[pr.b[0]].q, b = pts[pr.b[1]].q, al = 0.35+0.35*((pr.d/Rs)+1)/2;
-        ctx.strokeStyle = C.muted; ctx.globalAlpha = al; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(X(a),Y(a)); ctx.lineTo(X(b),Y(b)); ctx.stroke(); ctx.globalAlpha = 1; return;
+        ctx.strokeStyle = C.bond; ctx.globalAlpha = al; ctx.lineWidth = 2.6; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(X(a),Y(a)); ctx.lineTo(X(b),Y(b)); ctx.stroke(); ctx.globalAlpha = 1; return;
       }
       var p = pts[pr.i], A = p.A, se = A.nm==='Se', r = (se?0.5:0.36)*S*(1+0.10*p.q[2]/Rs), x = X(p.q), y = Y(p.q);
       var x0 = X(p.q0), y0 = Y(p.q0);
       ctx.strokeStyle = C.muted; ctx.lineWidth = 1; ctx.setLineDash([2,2]); ctx.beginPath(); ctx.arc(x0,y0,r*0.45,0,6.2832); ctx.stroke(); ctx.setLineDash([]);
-      ctx.globalAlpha = 0.65+0.35*((p.q[2]/Rs)+1)/2; ctx.fillStyle = C.sp[A.nm]; ctx.beginPath(); ctx.arc(x,y,r,0,6.2832); ctx.fill();
-      ctx.globalAlpha = 1; ctx.strokeStyle = C.surface; ctx.lineWidth = 1.5; ctx.stroke();
-      ctx.fillStyle = '#fff'; ctx.font = '600 '+Math.max(9,r*0.62).toFixed(0)+'px '+P.font; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.strokeText(A.sym,x,y+0.5); ctx.fillText(A.sym,x,y+0.5);
+      var col = C.sp[A.nm], gr = ctx.createRadialGradient(x-r*.35, y-r*.35, r*.1, x, y, r);
+      gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.35, col); gr.addColorStop(1, col);
+      ctx.fillStyle = gr; ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.lineWidth = 0.8;
+      ctx.beginPath(); ctx.arc(x,y,r,0,6.2832); ctx.fill(); ctx.stroke();
       var dx = p.va[0]*S, dy = -p.va[1]*S, len = Math.hypot(dx,dy);
-      if(A.mov && len>3){
+      if(state.arrows && A.mov && len>3){
         var ex = x+dx, ey = y+dy, ux = dx/len, uy = dy/len, hs = Math.min(9, 4+len*0.25);
         ctx.globalAlpha = 0.45+0.55*Math.abs(c0); ctx.strokeStyle = C.ink; ctx.fillStyle = C.ink; ctx.lineWidth = 2.4; ctx.lineCap = 'round';
         ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(ex-ux*hs*0.6,ey-uy*hs*0.6); ctx.stroke();
@@ -1173,7 +1184,7 @@ if (typeof module !== 'undefined') module.exports = { bandsAt, eigSym, hessQ, di
       }
     });
   }
-  function paintAll(){ if(!cols || (frameN++ % 120)===0) cols = getCols(); vscenes.forEach(function(P){ paint(P, anim.phase); }); }
+  function paintAll(){ if(!cols || cols.mat!==HS_MAT || (frameN++ % 120)===0) cols = getCols(); vscenes.forEach(function(P){ paint(P, anim.phase); }); }
   function loop(ts){
     anim.raf = 0;
     var active = state.play || state.spin;
@@ -1191,14 +1202,20 @@ if (typeof module !== 'undefined') module.exports = { bandsAt, eigSym, hessQ, di
     var host = $('vib');
     if(!hasSp()){ host.innerHTML = '<p class="note">The ball-and-stick view needs normal-mode eigenvectors, which the CRYSTAL and Quantum ESPRESSO engines provide. Switch the engine to see it.</p>'; vscenes = []; return; }
     var ks = lastLayout.ks, names = spNames(), out = '', specs = [];
+    $('lab-cacube').hidden = ks.length<2;   // the choice exists only when CH and CA are shown together
     ks.forEach(function(k){
-      var cur = D[k].cur, l = pick(cur, state.sel[k]), g = geomFor(k), N = g.ty.length, box = g.box;
+      // CH + CA: CA drawn in the same a0 x a0 x 2a0 block as CH (its tetragonal cell, a = a0/sqrt2, turned by 45 deg about z
+      // so that its axes lie along the cubic axes of the parent), so the two panels can be compared site by site
+      var cube = ks.length>1 && k==='CA' && state.caCube, rq = function(v){ return cube ? [(v[0]-v[1])/Math.SQRT2, (v[0]+v[1])/Math.SQRT2, v[2]] : v; };
+      var cur = D[k].cur, l = pick(cur, state.sel[k]), g = geomFor(k);
+      if(cube) g = {L:g.L.map(rq), pos:g.pos.map(rq), o:rq(g.o), ty:g.ty, box:[g.box[0]*Math.SQRT2, g.box[1]*Math.SQRT2, 2*g.box[2]]};
+      var N = g.ty.length, box = g.box;
       var atoms = [], eps = 0.3, umax = 0;
       for(var i2=0;i2<N;i2++){ var uu = Math.hypot(l.vec[3*i2],l.vec[3*i2+1],l.vec[3*i2+2]); if(uu>umax) umax = uu; }
       for(var i=0;i<N;i++) for(var a=-2;a<=2;a++) for(var b=-2;b<=2;b++) for(var c=-2;c<=2;c++){
         var p = [0,1,2].map(function(j){ return g.pos[i][j]-g.o[j] + a*g.L[0][j]+b*g.L[1][j]+c*g.L[2][j]; });
         if([0,1,2].every(function(j){ return p[j]>=-eps && p[j]<=box[j]+eps; })){
-          var u = [l.vec[3*i]/umax, l.vec[3*i+1]/umax, l.vec[3*i+2]/umax], nm = names[g.ty[i]];
+          var u = rq([l.vec[3*i]/umax, l.vec[3*i+1]/umax, l.vec[3*i+2]/umax]), nm = names[g.ty[i]];
           atoms.push({p:[p[0]-box[0]/2, p[1]-box[1]/2, p[2]-box[2]/2], u:u, nm:nm, sym:(nm==='Se'?((state.src==='HS'&&HS_MAT==='S')?'S':'Se'):(state.mass<0.5?'Zn':nm)), mov:Math.hypot(u[0],u[1],u[2])>0.05});
         }
       }
@@ -1206,7 +1223,7 @@ if (typeof module !== 'undefined') module.exports = { bandsAt, eigSym, hessQ, di
       atoms.forEach(function(A,ia){ if(A.nm==='Se') return; atoms.forEach(function(B,ib){ if(B.nm!=='Se') return; if(Math.hypot(A.p[0]-B.p[0],A.p[1]-B.p[1],A.p[2]-B.p[2])<2.9) bonds.push([ia,ib]); }); });
       var corners = []; for(var q=0;q<8;q++) corners.push([(q&1?1:-1)*box[0]/2, (q&2?1:-1)*box[1]/2, (q&4?1:-1)*box[2]/2]);
       var Rs = 0.5*Math.hypot(box[0],box[1],box[2]) + 0.8;
-      specs.push({k:k, f:l.f, atoms:atoms, bonds:bonds, corners:corners, Rs:Rs});
+      specs.push({k:k, f:l.f, atoms:atoms, bonds:bonds, corners:corners, Rs:Rs, caFrame:k==='CA' && !cube});
       var tot = totalIntensity(cur);
       var chip = function(v,txt){ return '<span class="chip" style="--c:'+SPC[txt]+'">'+txt+' '+pc(v)+'</span>'; };
       var head = '<div class="vh"><b style="color:'+(ks.length>1?KC[k]:'var(--series-1)')+'">'+(ks.length>1?k+' · ':'')+l.f.toFixed(1)+' cm⁻¹'+(l.deg>1?' (×'+l.deg+', one partner shown)':'')+'</b>' +
@@ -1229,7 +1246,7 @@ if (typeof module !== 'undefined') module.exports = { bandsAt, eigSym, hessQ, di
       cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up); cv.style.cursor = 'grab';
       vscenes.push(P);
     });
-    $('vib-cap').textContent = 'Drag a structure to rotate it (the two panels rotate together unless you untick the link). Balls oscillate along the normal mode about their equilibrium sites (dashed circles; amplitude exaggerated, largest = 0.6 Å). Arrows show the instantaneous velocity direction and speed of each moving atom, in 3D projected on the screen. The pattern repeats in every primitive cell (q = 0), cell box drawn as the conventional tetragonal cell. Atomic positions: '+(state.src==='CR'?'CRYSTAL relaxed cell':state.src==='HS'?'HSE cells (ZnSe → CuInSe₂), moved with the dynamical-matrix slider':'QE cell, moved with the dynamical-matrix slider')+'.';
+    $('vib-cap').textContent = 'Drag a structure to rotate it (the two panels rotate together unless you untick the link). Balls oscillate along the normal mode about their equilibrium sites (dashed circles; amplitude exaggerated, set with the Amplitude slider in Å for the atom that moves most). Arrows show the instantaneous velocity direction and speed of each moving atom, in 3D projected on the screen. The pattern repeats in every primitive cell (q = 0), cell box drawn as the conventional tetragonal cell'+(ks.length>1 && state.caCube ? ' of CH (a₀ × a₀ × 2a₀); CA is shown in the same block, with its own 4-atom pattern repeated, so that the two panels can be compared site by site' : '')+'. Atomic positions: '+(state.src==='CR'?'CRYSTAL relaxed cell':state.src==='HS'?'HSE cells (ZnSe → CuInSe₂), moved with the dynamical-matrix slider':'QE cell, moved with the dynamical-matrix slider')+'.';
     kick();
   }
 
@@ -1464,14 +1481,17 @@ if (typeof module !== 'undefined') module.exports = { bandsAt, eigSym, hessQ, di
   $('c-end').addEventListener('change', function(e){ state.showEnd = e.target.checked; update(); });
   $('sel-shade').addEventListener('change', function(e){ state.shade = e.target.value; update(); });
   $('sel-shk').addEventListener('change', function(e){ state.shadeK = e.target.value; update(); });
-  $('sel-view').addEventListener('change', function(e){ state.view = e.target.value; update(); });
   function playUI(){ $('btn-play').textContent = state.play ? '❚❚ Pause' : '▶ Animate'; $('btn-play').setAttribute('aria-pressed', state.play ? 'true':'false'); }
   $('btn-play').addEventListener('click', function(){ state.play = !state.play; playUI(); kick(); });
-  $('sel-speed').addEventListener('change', function(e){ state.speed = +e.target.value; });
+  $('rng-speed').addEventListener('input', function(e){ state.speed = +e.target.value; });
+  $('rng-amp').addEventListener('input', function(e){ state.amp = +e.target.value; if(!state.play) paintAll(); });
+  $('rng-arrow').addEventListener('input', function(e){ state.arrowScale = +e.target.value; if(!state.play) paintAll(); });
+  $('c-arrows').addEventListener('change', function(e){ state.arrows = e.target.checked; if(!state.play) paintAll(); });
   $('c-fscale').addEventListener('change', function(e){ state.fscale = e.target.checked; kick(); });
   $('c-spin').addEventListener('change', function(e){ state.spin = e.target.checked; kick(); });
   $('c-lrot').addEventListener('change', function(e){ state.linkRot = e.target.checked; });
-  $('sel-view').addEventListener('change', function(e){ state.view = e.target.value; rot.CH = viewMat(state.view); rot.CA = viewMat(state.view); kick(); });
+  $('c-cacube').addEventListener('change', function(e){ state.caCube = e.target.checked; draw(); });
+  document.querySelectorAll('#vib-panel [data-vv]').forEach(function(b){ b.addEventListener('click', function(){ state.view = b.dataset.vv; rot.CH = viewMat(state.view); rot.CA = viewMat(state.view); kick(); }); });
   if(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) state.play = false;
   playUI();
   $('btn-strong').addEventListener('click', function(){ state.sel = {CH:null,CA:null}; update(); });

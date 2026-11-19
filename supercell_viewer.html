@@ -274,7 +274,15 @@ a.btnlink:hover { filter: brightness(1.08); }
             <button type="button" class="seg" data-rep="2" aria-pressed="true">medium</button>
             <button type="button" class="seg" data-rep="3" aria-pressed="false">large</button>
           </div>
+          <div class="group" role="group" aria-label="Viewing direction">
+            <span class="lbl">View</span>
+            <button type="button" class="seg" data-mview="fig" title="Viewing direction of the manuscript figure">Paper view</button>
+            <button type="button" class="seg" data-mview="001">along [001]</button>
+            <button type="button" class="seg" data-mview="100">along [100]</button>
+            <button type="button" class="seg" data-mview="110">along [110]</button>
+          </div>
           <label class="chk"><input type="checkbox" id="mArrows" checked> Velocity arrows</label>
+          <label>Arrow length <input type="range" id="mArrowLen" min="0.25" max="3" step="0.05" value="1"></label>
         </div>
         <div class="mpw" id="mPWbox" hidden>
           <a id="mPW" class="btnlink" href="https://henriquemiranda.github.io/phononwebsite/phonon.html" target="_blank" rel="noopener">Open in the phonon website ↗</a>
@@ -306,7 +314,7 @@ a.btnlink:hover { filter: brightness(1.08); }
     CA: { V: mm(M_CA, A), o: [.5, 0, 0], col: '--ca', lab: 'c' },
     CH: { V: mm(M_CH, A), o: [.5, .5, 0], col: '--ch', lab: 'c' },
   };
-  const ATOM = { Zn: ['#8c8c8c', .050], Cu: ['#b5651d', .050], In: ['#2a9d8f', .060], Se: ['#e9c46a', .056] };
+  const ATOM = { Zn: ['#8c8c8c', .050], Cu: ['#b5651d', .050], In: ['#2a9d8f', .060], Se: ['#c49a1c', .056] };
   const FCC = [[0, 0, 0], [.5, .5, 0], [.5, 0, .5], [0, .5, .5]];
   const mod = (a, n) => ((a % n) + n) % n;
   function cation(p, ph) {
@@ -881,19 +889,24 @@ a.btnlink:hover { filter: brightness(1.08); }
   // public folder of the phonons/*.json files (GitHub repository of the Supplemental Material);
   // null: the folder next to this page, if served over http(s)
   const DATA_BASE = 'https://raw.githubusercontent.com/ljwirtz/raman_chalc_cuau/main/phonons/';
-  const ATOM = { Zn: ['#8c8c8c', .55], Cu: ['#b5651d', .55], In: ['#2a9d8f', .66], Se: ['#e9c46a', .62], S: ['#f2d22e', .56] };
+  const ATOM = { Zn: ['#8c8c8c', .55], Cu: ['#b5651d', .55], In: ['#2a9d8f', .66], Se: ['#c49a1c', .62], S: ['#f2d22e', .56] };
   const NAMES = { prim: 'zinc-blende primitive cell', CH: 'CH cell', Au: 'CA cell' };
   const COLK = { prim: '--zb', CH: '--ch', Au: '--ca' };
   const pretty = s => s.replace(/(\d)/g, '<sub>$1</sub>');
   const cache = {};
+  const q45 = v => [(v[0] - v[1]) * Math.SQRT1_2, (v[0] + v[1]) * Math.SQRT1_2, v[2]];
   function data(key) {
     if (cache[key]) return cache[key];
     const m = MODES[key], b = atob(m.v), a = new Int8Array(b.length);
     for (let i = 0; i < b.length; i++) a[i] = (b.charCodeAt(i) << 24) >> 24;
-    return (cache[key] = Object.assign({ V: a, nm: 3 * m.nat }, m));
+    const d = Object.assign({ V: a, nm: 3 * m.nat }, m);
+    // CA (Au) data come with the axes of the CA cell (a along the cubic [110], b along [-110]): turned into the cubic
+    // frame of the parent, so that the block is cut along the cubic axes and the view buttons mean the same for all cells
+    if (key.endsWith('_Au')) { d.turn = true; d.lat = m.lat.map(q45); d.pos = m.pos.map(q45); }
+    return (cache[key] = d);
   }
   const cv = document.getElementById('mCv'), ctx = cv.getContext('2d');
-  const st = { key: null, i: 0, n: 0, rep: 2, amp: 0.35, speed: 1, arrows: true, play: !matchMedia('(prefers-reduced-motion: reduce)').matches, t: 0 };
+  const st = { key: null, i: 0, n: 0, rep: 2, amp: 0.35, speed: 1, arrows: true, arrowScale: 1, play: !matchMedia('(prefers-reduced-motion: reduce)').matches, t: 0 };
   let R = null;           // rotation matrix (rows: screen x, screen y, depth)
   let geo = null;         // supercell for the current dataset and repetition
   const sub = (a, b) => [a[0]-b[0], a[1]-b[1], a[2]-b[2]];
@@ -901,8 +914,12 @@ a.btnlink:hover { filter: brightness(1.08); }
   function rotY(a) { const c = Math.cos(a), s = Math.sin(a); return [[c,0,s],[0,1,0],[-s,0,c]]; }
   function rotZ(a) { const c = Math.cos(a), s = Math.sin(a); return [[c,-s,0],[s,c,0],[0,0,1]]; }
   function mul(A, B) { return A.map(r => [0,1,2].map(j => r[0]*B[0][j] + r[1]*B[1][j] + r[2]*B[2][j])); }
-  // c (z) axis up, seen slightly from above and from the side
-  const VIEW0 = () => mul(mul(rotX(0.32), [[1,0,0],[0,0,1],[0,-1,0]]), rotZ(-0.5));
+  // viewing directions in the cubic frame of the ZB parent, as for the cells above (rows: screen x, screen y, towards
+  // the viewer); the paper view is the one of the manuscript figure (elevation 14 deg, azimuth -62 deg)
+  const deg = Math.PI / 180, S2 = Math.SQRT1_2;
+  function viewFromAngles(el, az) { return [[-Math.sin(az), Math.cos(az), 0], [-Math.cos(az)*Math.sin(el), -Math.sin(az)*Math.sin(el), Math.cos(el)], [Math.cos(az)*Math.cos(el), Math.sin(az)*Math.cos(el), Math.sin(el)]]; }
+  const MVIEWS = { fig: () => viewFromAngles(14*deg, -62*deg), '001': () => [[1,0,0],[0,1,0],[0,0,1]], '100': () => [[0,1,0],[0,0,1],[1,0,0]], '110': () => [[-S2,S2,0],[0,0,1],[S2,S2,0]] };
+  const VIEW0 = MVIEWS.fig;
   R = VIEW0();
 
   // conventional block: the shortest lattice vectors along x, y and z (cubic for zinc blende, tetragonal for CA and CH)
@@ -952,7 +969,7 @@ a.btnlink:hover { filter: brightness(1.08); }
     const ph = 2 * Math.PI * (q[0]*o.c[0] + q[1]*o.c[1] + q[2]*o.c[2]) - phase, c = Math.cos(ph), s = Math.sin(ph);
     const u = [];
     for (let x = 0; x < 3; x++) { const re = m.V[off + 2*x] / 127, im = m.V[off + 2*x + 1] / 127; u.push(vel ? re*s + im*c : re*c - im*s); }
-    return u;
+    return m.turn ? q45(u) : u;
   }
 
   const PROMPT = 'Click somewhere in one of the dispersions above to start the animation.';
@@ -987,8 +1004,8 @@ a.btnlink:hover { filter: brightness(1.08); }
 
   function render(W, H, phase, alpha, arrows) {
     const css = getComputedStyle(document.documentElement), ink = css.getPropertyValue('--ink').trim(), bondc = css.getPropertyValue('--bond').trim() || '#8a8f93';
-    const S = Math.min(W, H) / geo.size * 1.05, m = data(st.key);
-    const P = r => { const d = sub(r, geo.c); return [W/2 + S*(R[0][0]*d[0] + R[0][1]*d[1] + R[0][2]*d[2]), H/2 - S*(R[1][0]*d[0] + R[1][1]*d[1] + R[1][2]*d[2]), R[2][0]*d[0] + R[2][1]*d[1] + R[2][2]*d[2]]; };
+    const S = Math.min(W, H) / geo.size * 1.05, m = data(st.key), Rv = R;
+    const P = r => { const d = sub(r, geo.c); return [W/2 + S*(Rv[0][0]*d[0] + Rv[0][1]*d[1] + Rv[0][2]*d[2]), H/2 - S*(Rv[1][0]*d[0] + Rv[1][1]*d[1] + Rv[1][2]*d[2]), Rv[2][0]*d[0] + Rv[2][1]*d[1] + Rv[2][2]*d[2]]; };
     const pos = geo.at.map(o => { const u = disp(o, phase); return P([0,1,2].map(x => o.r[x] + st.amp * u[x])); });
     ctx.lineCap = 'round';
     ctx.strokeStyle = bondc; ctx.lineWidth = 2.2; ctx.globalAlpha = 0.75 * alpha;
@@ -1003,7 +1020,7 @@ a.btnlink:hover { filter: brightness(1.08); }
       ctx.beginPath(); ctx.arc(p[0], p[1], r, 0, 2*Math.PI); ctx.fill(); ctx.stroke();
       if (arrows) {
         // velocity of the atom at this instant: longest when it passes its rest position, zero at the turning points
-        const u = disp(o, phase, true), e = P([0,1,2].map(x => o.r[x] + 1.4 * u[x])), b = P(o.r);
+        const u = disp(o, phase, true), e = P([0,1,2].map(x => o.r[x] + 1.4 * st.arrowScale * u[x])), b = P(o.r);
         const dx = e[0] - b[0], dy = e[1] - b[1], L = Math.hypot(dx, dy);
         if (L > 1.5) {
           ctx.strokeStyle = ink; ctx.fillStyle = ink; ctx.lineWidth = 1.6;
@@ -1085,6 +1102,8 @@ a.btnlink:hover { filter: brightness(1.08); }
   document.getElementById('mAmp').oninput = e => { st.amp = +e.target.value; };
   document.getElementById('mSpeed').oninput = e => { st.speed = +e.target.value; };
   document.getElementById('mArrows').onchange = e => { st.arrows = e.target.checked; };
+  document.querySelectorAll('#mCard [data-mview]').forEach(b => b.onclick = () => { R = MVIEWS[b.dataset.mview](); });
+  document.getElementById('mArrowLen').oninput = e => { st.arrowScale = +e.target.value; };
   // drag to rotate
   let drag = null;
   cv.addEventListener('pointerdown', e => { drag = [e.clientX, e.clientY]; cv.setPointerCapture(e.pointerId); });
